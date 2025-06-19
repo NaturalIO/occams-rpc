@@ -3,7 +3,7 @@ use crate::error::*;
 use std::fmt;
 use std::mem::{size_of, transmute};
 use std::ptr::addr_of;
-use zerocopy::{AsBytes, FromBytes, Unaligned};
+use zerocopy::{AsBytes, Unaligned};
 
 pub const PING_ACTION: u32 = 0;
 
@@ -66,7 +66,7 @@ impl ReqHead {
                 action_str = Some(s.as_bytes());
             }
         }
-        let msg = task.get_msg_buf();
+        let msg = task.get_msg_buf_req();
         let ext_buf = task.get_ext_buf_req();
         let msg_len = if let Some(msg_buf) = msg.as_ref() { msg_buf.len() as u32 } else { 0 };
         let blob_len = if let Some(blob) = ext_buf { blob.len() as u32 } else { 0 };
@@ -162,7 +162,7 @@ impl Default for ReqHead {
 
 /// Response:
 ///
-/// Fixed len of RespHead = 28B
+/// Fixed len of RespHead = 20B
 /// | 2B   |1B | 1B      |  8B  |     4B  | 4B     |
 /// | magic|ver| has_err |  seq | msg_len |blob_len|
 ///

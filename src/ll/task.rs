@@ -27,7 +27,7 @@ pub trait RpcTask: Sync + Sized + std::fmt::Display {
         None
     }
 
-    fn get_msg_buf(&self) -> Option<Vec<u8>>;
+    fn get_msg_buf_req(&self) -> Option<Vec<u8>>;
 
     fn set_result(self, res: Result<&[u8], RPCError>);
 }
