@@ -1,4 +1,4 @@
-use super::task::{RpcAction, RpcRespServer, RpcTask};
+use super::task::{RpcAction, RpcClientTask, RpcSvrResp};
 use crate::error::*;
 use std::fmt;
 use std::mem::{size_of, transmute};
@@ -55,7 +55,7 @@ impl ReqHead {
         client_id: u64, task: &'a T,
     ) -> (Self, Option<&'a [u8]>, Option<Vec<u8>>, Option<&'a [u8]>)
     where
-        T: RpcTask,
+        T: RpcClientTask,
     {
         let action_flag: u32;
         let mut action_str: Option<&'a [u8]> = None;
@@ -66,8 +66,8 @@ impl ReqHead {
                 action_str = Some(s.as_bytes());
             }
         }
-        let msg = task.get_msg_buf_req();
-        let ext_buf = task.get_ext_buf_req();
+        let msg = task.get_req_msg_buf();
+        let ext_buf = task.get_req_ext_buf();
         let msg_len = if let Some(msg_buf) = msg.as_ref() { msg_buf.len() as u32 } else { 0 };
         let blob_len = if let Some(blob) = ext_buf { blob.len() as u32 } else { 0 };
         // encode response header
@@ -85,7 +85,7 @@ impl ReqHead {
     }
 
     #[inline(always)]
-    pub fn decode(head_buf: &[u8]) -> Result<&Self, RPCError> {
+    pub fn decode(head_buf: &[u8]) -> Result<&Self, RpcError> {
         let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
         match _head {
             None => {
@@ -98,7 +98,7 @@ impl ReqHead {
                 }
                 if head.ver != 1 {
                     warn!("rpc server: version {} not supported", head.ver);
-                    return Err(RPCError::Rpc(ERR_NOT_SUPPORTED));
+                    return Err(RpcError::Rpc(ERR_NOT_SUPPORTED));
                 }
                 return Ok(head);
             }
@@ -118,7 +118,7 @@ impl ReqHead {
 
 impl fmt::Display for ReqHead {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
+        let _ = unsafe {
             write!(
                 f,
                 "[client_id:{}, seq:{}, msg:{}, blob:{}",
@@ -130,10 +130,10 @@ impl fmt::Display for ReqHead {
         };
         match self.get_action() {
             Ok(action_num) => {
-                write!(f, ", action:{}]", action_num,)
+                write!(f, ", action:{:?}]", action_num)
             }
             Err(action_len) => {
-                write!(f, "action_len:{}]", action_len,)
+                write!(f, "action_len:{}]", action_len)
             }
         }
     }
@@ -192,15 +192,18 @@ pub struct RespHead {
 pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
 
 impl RespHead {
-    pub fn encode<'a>(
-        task_resp: &'a RpcRespServer<'a>,
-    ) -> (Self, Option<&'a Vec<u8>>, Option<&'a [u8]>) {
+    pub fn encode<'a>(task_resp: &'a RpcSvrResp) -> (Self, Option<&'a Vec<u8>>, Option<&'a [u8]>) {
         let error_str: &[u8];
         let seq = task_resp.seq;
         match task_resp.res {
-            Ok((ref msg, blob)) => {
+            Ok((ref msg, ref blob)) => {
                 let msg_len = if let Some(msg_buf) = msg.as_ref() { msg_buf.len() } else { 0 };
-                let blob_len = if let Some(blob_buf) = blob.as_ref() { blob_buf.len() } else { 0 };
+                let mut blob_len: u32 = 0;
+                let mut blob_o: Option<&[u8]> = None;
+                if let Some(blob_buf) = blob.as_ref() {
+                    blob_len = blob_buf.len() as u32;
+                    blob_o = Some(blob_buf.as_ref());
+                }
                 let header = RespHead {
                     magic: RPC_MAGIC,
                     ver: 1,
@@ -209,9 +212,9 @@ impl RespHead {
                     msg_len: msg_len as u32,
                     blob_len: blob_len as u32,
                 };
-                return (header, msg.as_ref(), blob);
+                return (header, msg.as_ref(), blob_o);
             }
-            Err(RPCError::Posix(errno)) => {
+            Err(RpcError::Posix(errno)) => {
                 let header = RespHead {
                     magic: RPC_MAGIC,
                     ver: 1,
@@ -222,10 +225,10 @@ impl RespHead {
                 };
                 return (header, None, None);
             }
-            Err(RPCError::Rpc(s)) => {
+            Err(RpcError::Rpc(s)) => {
                 error_str = s.as_bytes();
             }
-            Err(RPCError::Remote(ref s)) => {
+            Err(RpcError::Remote(ref s)) => {
                 error_str = s.as_bytes();
             }
         }
@@ -241,7 +244,7 @@ impl RespHead {
     }
 
     #[inline(always)]
-    pub fn decode(head_buf: &[u8]) -> Result<&Self, RPCError> {
+    pub fn decode(head_buf: &[u8]) -> Result<&Self, RpcError> {
         let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
         match _head {
             None => {
@@ -254,7 +257,7 @@ impl RespHead {
                 }
                 if head.ver != 1 {
                     warn!("rpc server: version {} not supported", head.ver);
-                    return Err(RPCError::Rpc(ERR_NOT_SUPPORTED));
+                    return Err(RpcError::Rpc(ERR_NOT_SUPPORTED));
                 }
                 return Ok(head);
             }
@@ -292,9 +295,11 @@ impl Default for RespHead {
 #[cfg(test)]
 mod tests {
 
+    use super::*;
+
     #[test]
     fn test_header_len() {
         assert_eq!(RPC_REQ_HEADER_LEN, 32);
-        assert_eq!(RPC_REQ_HEADER_LEN, 28);
+        assert_eq!(RPC_RESP_HEADER_LEN, 20);
     }
 }

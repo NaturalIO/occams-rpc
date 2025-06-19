@@ -25,24 +25,24 @@ macro_rules! retry_with_err {
     };
 }
 
-pub struct RpcTaskItem<T: RpcTask + Send + Unpin> {
+pub struct RpcClientTaskItem<T: RpcClientTask + Send + Unpin> {
     pub task: Option<T>,
     _upstream: Option<WaitGroupGuard>,
 }
 
-pub struct DelayTasksBatch<T: RpcTask + Send + Unpin> {
-    tasks: FxHashMap<u64, RpcTaskItem<T>>,
+pub struct DelayTasksBatch<T: RpcClientTask + Send + Unpin> {
+    tasks: FxHashMap<u64, RpcClientTaskItem<T>>,
 }
 
-pub struct RpcTaskNotifier<T: RpcTask + Send + Unpin> {
+pub struct RpcClientTaskNotifier<T: RpcClientTask + Send + Unpin> {
     server_id: u64,
     client_id: u64,
-    pending_tasks_recv: mpsc::RxFuture<RpcTaskItem<T>, mpsc::SharedFutureBoth>,
-    pending_tasks_sender: mpsc::TxFuture<RpcTaskItem<T>, mpsc::SharedFutureBoth>,
+    pending_tasks_recv: mpsc::RxFuture<RpcClientTaskItem<T>, mpsc::SharedFutureBoth>,
+    pending_tasks_sender: mpsc::TxFuture<RpcClientTaskItem<T>, mpsc::SharedFutureBoth>,
     pending_task_count: AtomicU64,
 
-    sent_tasks: FxHashMap<u64, RpcTaskItem<T>>, // sent_tasks of the current second
-    delay_tasks_queue: VecDeque<DelayTasksBatch<T>>, // sent_tasks of past seconds
+    sent_tasks: FxHashMap<u64, RpcClientTaskItem<T>>, // sent_tasks of the current second
+    delay_tasks_queue: VecDeque<DelayTasksBatch<T>>,  // sent_tasks of past seconds
     sent_task_waker: Option<LockedWaker>,
 
     min_delay_seq: u64,
@@ -52,7 +52,7 @@ pub struct RpcTaskNotifier<T: RpcTask + Send + Unpin> {
     reg_stopped_flag: AtomicBool,
 }
 
-impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
+impl<T: RpcClientTask + Send + Unpin> RpcClientTaskNotifier<T> {
     pub fn new(server_id: u64, client_id: u64, task_timeout: usize, mut thresholds: usize) -> Self {
         if thresholds == 0 {
             thresholds = 500;
@@ -138,8 +138,10 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
     // register noti for task.
     #[inline(always)]
     pub async fn reg_task(&self, task: T, wg: Option<WaitGroupGuard>) {
-        let _ =
-            self.pending_tasks_sender.send(RpcTaskItem { task: Some(task), _upstream: wg }).await;
+        let _ = self
+            .pending_tasks_sender
+            .send(RpcClientTaskItem { task: Some(task), _upstream: wg })
+            .await;
     }
 
     // stop register.
@@ -147,7 +149,7 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
         self.reg_stopped_flag.store(true, Ordering::Release);
     }
 
-    pub async fn take_task(&mut self, seq: u64) -> Option<RpcTaskItem<T>> {
+    pub async fn take_task(&mut self, seq: u64) -> Option<RpcClientTaskItem<T>> {
         // ping resp won't readh here
         if seq < self.min_delay_seq {
             return None; // Task is already timeouted by us
@@ -189,7 +191,7 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
 
     // return None if task is store in sent_tasks
     #[inline]
-    fn got_pending_task(&mut self, task_item: RpcTaskItem<T>) {
+    fn got_pending_task(&mut self, task_item: RpcClientTaskItem<T>) {
         self.pending_task_count.fetch_sub(1, Ordering::SeqCst);
         let t = task_item.task.as_ref().unwrap();
         let task_seq = t.seq();
@@ -225,7 +227,7 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
                         "task {} is timeout on client={}:{}",
                         _task, self.server_id, self.client_id
                     );
-                    retry_with_err!(retry_tx, _task, RPCError::Rpc(ERR_TIMEOUT));
+                    retry_with_err!(retry_tx, _task, RpcError::Rpc(ERR_TIMEOUT));
                 }
                 self.min_delay_seq = min_seq;
             }
@@ -235,15 +237,15 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
 
 struct WaitRegTaskFuture<'a, T>
 where
-    T: RpcTask + Send + Unpin,
+    T: RpcClientTask + Send + Unpin,
 {
-    noti: &'a mut RpcTaskNotifier<T>,
+    noti: &'a mut RpcClientTaskNotifier<T>,
     target_seq: u64,
 }
 
 impl<'a, T> Future for WaitRegTaskFuture<'a, T>
 where
-    T: RpcTask + Send + Unpin,
+    T: RpcClientTask + Send + Unpin,
 {
     type Output = Result<(), ()>;
 
