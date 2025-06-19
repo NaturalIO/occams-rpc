@@ -1,3 +1,4 @@
+use super::task::{RpcAction, RpcRespServer, RpcTask};
 use crate::error::*;
 use std::fmt;
 use std::mem::{size_of, transmute};
@@ -8,6 +9,9 @@ pub const PING_ACTION: u32 = 0;
 
 pub const RPC_MAGIC: [u8; 2] = [b'%', b'M'];
 pub const U32_HIGH_MASK: u32 = 1 << 31;
+
+pub const RESP_FLAG_HAS_ERRNO: u8 = 1;
+pub const RESP_FLAG_HAS_ERR_STRING: u8 = 2;
 
 /// Request:
 ///
@@ -46,6 +50,40 @@ pub struct ReqHead {
 pub const RPC_REQ_HEADER_LEN: usize = size_of::<ReqHead>();
 
 impl ReqHead {
+    #[inline(always)]
+    pub fn encode<'a, T>(
+        client_id: u64, task: &'a T,
+    ) -> (Self, Option<&'a [u8]>, Option<Vec<u8>>, Option<&'a [u8]>)
+    where
+        T: RpcTask,
+    {
+        let action_flag: u32;
+        let mut action_str: Option<&'a [u8]> = None;
+        match task.action() {
+            RpcAction::Num(num) => action_flag = num as u32,
+            RpcAction::Str(s) => {
+                action_flag = s.len() as u32 | U32_HIGH_MASK;
+                action_str = Some(s.as_bytes());
+            }
+        }
+        let msg = task.get_msg_buf();
+        let ext_buf = task.get_ext_buf_req();
+        let msg_len = if let Some(msg_buf) = msg.as_ref() { msg_buf.len() as u32 } else { 0 };
+        let blob_len = if let Some(blob) = ext_buf { blob.len() as u32 } else { 0 };
+        // encode response header
+        let header = ReqHead {
+            magic: RPC_MAGIC,
+            seq: task.seq(),
+            client_id,
+            ver: 1,
+            format: 0,
+            action: action_flag,
+            msg_len,
+            blob_len,
+        };
+        (header, action_str, msg, ext_buf)
+    }
+
     #[inline(always)]
     pub fn decode(head_buf: &[u8]) -> Result<&Self, RPCError> {
         let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
@@ -125,8 +163,8 @@ impl Default for ReqHead {
 /// Response:
 ///
 /// Fixed len of RespHead = 28B
-/// | 2B   |1B | 1B    | 4B  | 8B  | 4B     |   4B  | 4B       |
-/// | magic|ver| format| err | seq | action | msg_len |blob_len|
+/// | 2B   |1B | 1B      |  8B  |     4B  | 4B     |
+/// | magic|ver| has_err |  seq | msg_len |blob_len|
 ///
 /// Variable length msg:
 /// msg_len
@@ -137,23 +175,16 @@ impl Default for ReqHead {
 pub struct RespHead {
     pub magic: [u8; 2],
     pub ver: u8,
-    pub format: u8,
 
-    ///If highest is 0, hold unix errno in i32.
-    /// If highest is 1, the rest bit is set zero. msg_len is the error string.
-    pub err: u32,
+    /// when flag == RESP_FLAG_HAS_ERRNO: msg_len is posix errno; blob_len = 0
+    /// when flag == RESP_FLAG_HAS_ERR_STRING: msg_len=0, blob_len > 0 and follow an error string
+    pub flag: u8,
+
+    /// structured msg_len or errno
+    pub msg_len: u32,
 
     /// Increased ID of request msg in the socket connection (response.seq==request.seq)
     pub seq: u64,
-
-    /// If highest bit is 0, the rest will be i32 action_num.
-    ///
-    /// If highest is 1, the lower bit will be no meaning,
-    pub action: u32,
-
-    /// structured msg len
-    pub msg_len: u32,
-
     /// unstructured msg
     pub blob_len: u32,
 }
@@ -161,6 +192,54 @@ pub struct RespHead {
 pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
 
 impl RespHead {
+    pub fn encode<'a>(
+        task_resp: &'a RpcRespServer<'a>,
+    ) -> (Self, Option<&'a Vec<u8>>, Option<&'a [u8]>) {
+        let error_str: &[u8];
+        let seq = task_resp.seq;
+        match task_resp.res {
+            Ok((ref msg, blob)) => {
+                let msg_len = if let Some(msg_buf) = msg.as_ref() { msg_buf.len() } else { 0 };
+                let blob_len = if let Some(blob_buf) = blob.as_ref() { blob_buf.len() } else { 0 };
+                let header = RespHead {
+                    magic: RPC_MAGIC,
+                    ver: 1,
+                    flag: 0,
+                    seq: task_resp.seq,
+                    msg_len: msg_len as u32,
+                    blob_len: blob_len as u32,
+                };
+                return (header, msg.as_ref(), blob);
+            }
+            Err(RPCError::Posix(errno)) => {
+                let header = RespHead {
+                    magic: RPC_MAGIC,
+                    ver: 1,
+                    flag: RESP_FLAG_HAS_ERRNO,
+                    seq: task_resp.seq,
+                    msg_len: errno as u32,
+                    blob_len: 0,
+                };
+                return (header, None, None);
+            }
+            Err(RPCError::Rpc(s)) => {
+                error_str = s.as_bytes();
+            }
+            Err(RPCError::Remote(ref s)) => {
+                error_str = s.as_bytes();
+            }
+        }
+        let header = RespHead {
+            magic: RPC_MAGIC,
+            ver: 1,
+            flag: RESP_FLAG_HAS_ERR_STRING,
+            seq,
+            msg_len: 0,
+            blob_len: error_str.len() as u32,
+        };
+        return (header, None, Some(error_str));
+    }
+
     #[inline(always)]
     pub fn decode(head_buf: &[u8]) -> Result<&Self, RPCError> {
         let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
@@ -181,21 +260,6 @@ impl RespHead {
             }
         }
     }
-
-    #[inline]
-    pub fn get_error(&self) -> Result<i32, i32> {
-        if self.err & U32_HIGH_MASK == 0 {
-            Ok(self.err as i32)
-        } else {
-            let err_len = self.err ^ U32_HIGH_MASK;
-            Err(err_len as i32)
-        }
-    }
-
-    #[inline]
-    pub fn get_action(&self) -> Result<i32, ()> {
-        if self.action & U32_HIGH_MASK == 0 { Ok(self.action as i32) } else { Err(()) }
-    }
 }
 
 impl fmt::Display for RespHead {
@@ -203,18 +267,12 @@ impl fmt::Display for RespHead {
         unsafe {
             write!(
                 f,
-                "[seq:{}, format:{}, msg:{}, blob:{}",
+                "[seq:{}, flag:{}, msg:{}, blob:{}]",
                 addr_of!(self.seq).read_unaligned(), // format_args deals with unaligned field
-                addr_of!(self.format).read_unaligned(),
+                addr_of!(self.flag).read_unaligned(),
                 addr_of!(self.msg_len).read_unaligned(),
                 addr_of!(self.blob_len).read_unaligned(),
             )
-        };
-        match self.get_error() {
-            Ok(err_no) => {
-                write!(f, ", errno:{}]", err_no)
-            }
-            Err(err_len) => unsafe { write!(f, "err_len:{}]", err_len,) },
         }
     }
 }
@@ -227,16 +285,7 @@ impl fmt::Debug for RespHead {
 
 impl Default for RespHead {
     fn default() -> Self {
-        Self {
-            ver: 0,
-            seq: 0,
-            format: 0,
-            action: 0,
-            err_no: 0,
-            msg_len: 0,
-            blob_len: 0,
-            magic: RPC_MAGIC,
-        }
+        Self { magic: RPC_MAGIC, ver: 0, flag: 0, msg_len: 0, seq: 0, blob_len: 0 }
     }
 }
 

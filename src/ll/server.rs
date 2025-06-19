@@ -225,60 +225,35 @@ impl RpcServerConn {
     }
 
     pub async fn send_resp<'a>(
-        &'a self, task_resp: &'a RpcResponse<'a>, need_flush: bool,
+        &'a self, task_resp: &'a RpcRespServer<'a>, need_flush: bool,
     ) -> Result<(), RPCError> {
         let inner = self.0.as_ref();
-
         let writer = inner.get_stream_mut();
         let write_timeout = inner.timeouts.write_timeout;
-
-        let msg_len = if let Some(ref msg_buf) = task_resp.msg { msg_buf.len() } else { 0 };
-
-        let blob_len = if let Some(ref ext_buf) = task_resp.extension { ext_buf.len() } else { 0 };
-
-        let header = RespHead {
-            magic: RPC_MAGIC,
-            seq: task_resp.seq,
-            format: 0,
-            action: task_resp.action,
-            err_no: task_resp.err_no,
-            ver: 1,
-            msg_len: msg_len as u32,
-            blob_len: blob_len as u32,
-            ..Default::default()
-        };
-        trace!("{}: send resp: {}", self, header);
-        let r = writer.write_timeout(header.as_bytes(), write_timeout).await;
-        if r.is_err() {
-            warn!("{}: send_resp write resp header err: {:?}", self, r);
+        let (header, msg_buf, blob_buf) = RespHead::encode(task_resp);
+        if let Err(e) = writer.write_timeout(header.as_bytes(), write_timeout).await {
+            warn!("{}: send_resp write resp header err: {:?}", self, e);
             return Err(RPC_ERR_COMM);
         }
-
-        if let Some(msg_buf) = task_resp.msg.as_ref() {
-            let r = writer.write_timeout(msg_buf, write_timeout).await;
-            if r.is_err() {
-                debug!("{}: send_resp write resp msg err: {:?}", self, r);
+        trace!("{}: send resp: {}", self, header);
+        if let Some(msg) = msg_buf.as_ref() {
+            if let Err(e) = writer.write_timeout(msg.as_bytes(), write_timeout).await {
+                debug!("{}: send_resp write resp msg err: {:?}", self, e);
                 return Err(RPC_ERR_COMM);
             }
         }
-
-        if blob_len > 0 {
-            let r =
-                writer.write_timeout(task_resp.extension.as_ref().unwrap(), write_timeout).await;
-            if r.is_err() {
-                debug!("{}: send_resp write resp extension err: {:?}", self, r);
+        if let Some(blob) = blob_buf.as_ref() {
+            if let Err(e) = writer.write_timeout(blob.as_bytes(), write_timeout).await {
+                debug!("{}: send_resp write resp extension err: {:?}", self, e);
                 return Err(RPC_ERR_COMM);
             }
         }
         if need_flush {
-            let r = writer.flush_timeout(write_timeout).await;
-            if r.is_err() {
-                debug!("{}: send_resp flush resp err: {:?}", self, r);
+            if let Err(e) = writer.flush_timeout(write_timeout).await {
+                debug!("{}: send_resp flush resp err: {:?}", self, e);
                 return Err(RPC_ERR_COMM);
             }
-            trace!("{}: send_resp flushed resp: {}", self, header);
         }
-
         return Ok(());
     }
 

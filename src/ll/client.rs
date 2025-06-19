@@ -321,48 +321,39 @@ where
 
     #[inline(always)]
     async fn send_request(&self, task: &mut T, need_flush: bool) -> Result<(), RPCError> {
-        let msg_buf = task.get_msg_buf().unwrap();
-        let blob_len =
-            if let Some(ref ext_buf) = task.get_ext_buf_ref() { ext_buf.len() } else { 0 };
-
         let seq = self.seq_update();
         task.set_seq(seq);
-        // encode response header
-        let header = ReqHead {
-            magic: RPC_MAGIC,
-            seq,
-            client_id: self.client_id,
-            ver: 1,
-            format: 0,
-            action: task.action(),
-            msg_len: msg_buf.len() as u32,
-            blob_len: blob_len as u32,
-            ..Default::default()
-        };
-
+        let (header, action_str, msg_buf, blob_buf) = ReqHead::encode(self.client_id, task);
         let writer = self.get_stream_mut();
-        let r = writer.write_timeout(header.as_bytes(), self.timeout.write_timeout).await;
-        if r.is_err() {
-            logger_warn!(self.logger, "{:?} send_req write req header err: {:?}", self, r);
+        let header_bytes = header.as_bytes();
+        let mut data_len = header_bytes.len();
+        if let Err(e) = writer.write_timeout(header_bytes, self.timeout.write_timeout).await {
+            logger_warn!(self.logger, "{:?} send_req write req header err: {:?}", self, e);
             return Err(RPC_ERR_COMM);
         }
-        logger_debug!(self.logger, "{:?} rpc client send request {}", self, header);
-
-        let r = writer.write_timeout(&msg_buf, self.timeout.write_timeout).await;
-        if r.is_err() {
-            logger_warn!(self.logger, "{:?} send_req write req msg err: {:?}", self, r);
-            return Err(RPC_ERR_COMM);
-        }
-
-        if blob_len > 0 {
-            let ext_buf = task.get_ext_buf_ref().unwrap();
-            let r = writer.write_timeout(&ext_buf, self.timeout.write_timeout).await;
-            if r.is_err() {
-                logger_warn!(self.logger, "{:?} send_req write req ext err: {:?}", self, r);
+        if let Some(action_s) = action_str {
+            data_len += action_s.len();
+            if let Err(e) = writer.write_timeout(action_s, self.timeout.write_timeout).await {
+                logger_warn!(self.logger, "{:?} send_req write req header err: {:?}", self, e);
                 return Err(RPC_ERR_COMM);
             }
         }
-        if need_flush || blob_len >= 32 * 1024 {
+        if let Some(msg) = msg_buf {
+            data_len += msg.len();
+            if let Err(e) = writer.write_timeout(msg.as_bytes(), self.timeout.write_timeout).await {
+                logger_warn!(self.logger, "{:?} send_req write req header err: {:?}", self, e);
+                return Err(RPC_ERR_COMM);
+            }
+        }
+        if let Some(blob) = blob_buf {
+            data_len += blob.len();
+            if let Err(e) = writer.write_timeout(blob.as_bytes(), self.timeout.write_timeout).await
+            {
+                logger_warn!(self.logger, "{:?} send_req write req ext err: {:?}", self, e);
+                return Err(RPC_ERR_COMM);
+            }
+        }
+        if need_flush || data_len >= 32 * 1024 {
             let r = writer.flush_timeout(self.timeout.write_timeout).await;
             if r.is_err() {
                 warn!("{:?} send_req flush req err: {:?}", self, r);
@@ -415,12 +406,12 @@ where
         }
     }
 
-    async fn _recv_error(&self, rpc_head: &RespHead, task: T) -> Result<(), RPCError> {
-        log_debug_assert!(rpc_head.err > 0);
+    async fn _recv_error(&self, resp_head: &RespHead, task: T) -> Result<(), RPCError> {
+        log_debug_assert!(resp_head.flag > 0);
         let reader = self.get_stream_mut();
-        match rpc_head.get_error() {
-            Ok(err_no) => {
-                let rpc_err = RPCError::Posix(Errno::from_raw(err_no));
+        match resp_head.flag {
+            1 => {
+                let rpc_err = RPCError::Posix(Errno::from_raw(resp_head.msg_len as i32));
                 //if self.should_close(err_no) {
                 //    self.closed.store(true, Ordering::Release);
                 //    retry_with_err!(self, task, rpc_err);
@@ -429,8 +420,8 @@ where
                 retry_with_err!(self, task, rpc_err);
                 return Ok(());
             }
-            Err(err_len) => {
-                let buf = self.get_resp_buf(err_len as usize);
+            2 => {
+                let buf = self.get_resp_buf(resp_head.blob_len as usize);
                 match reader.read_exact_timeout(buf, self.timeout.read_timeout).await {
                     Err(_) => {
                         self.closed.store(true, Ordering::Release);
@@ -440,6 +431,12 @@ where
                     Ok(_) => {
                         match str::from_utf8(buf) {
                             Err(_) => {
+                                logger_error!(
+                                    self.logger,
+                                    "{:?} recv task {} err string invalid",
+                                    self,
+                                    task
+                                );
                                 retry_with_err!(self, task, RPC_ERR_DECODE);
                             }
                             Ok(s) => {
@@ -451,26 +448,22 @@ where
                     }
                 }
             }
+            _ => unreachable!(),
         }
     }
 
-    async fn _recv_resp_body(&self, rpc_head: &RespHead) -> Result<(), RPCError> {
-        if rpc_head.action == 0 {
-            // PING_ACTION
-            return Ok(());
-        }
+    async fn _recv_resp_body(&self, resp_head: &RespHead) -> Result<(), RPCError> {
         let reader = self.get_stream_mut();
         let read_timeout = self.timeout.read_timeout;
         let notifier = self.get_notifier_mut();
-        let blob_len = rpc_head.blob_len;
-        let seq = rpc_head.seq;
-        let read_buf = self.get_resp_buf(rpc_head.msg_len as usize);
-        if let Some(mut task_item) = notifier.take_task(seq).await {
+        let blob_len = resp_head.blob_len;
+        let read_buf = self.get_resp_buf(resp_head.msg_len as usize);
+        if let Some(mut task_item) = notifier.take_task(resp_head.seq).await {
             let mut task = task_item.task.take().unwrap();
-            if rpc_head.err > 0 {
-                return self._recv_error(rpc_head, task).await;
+            if resp_head.flag > 0 {
+                return self._recv_error(resp_head, task).await;
             }
-            if rpc_head.msg_len > 0 {
+            if resp_head.msg_len > 0 {
                 if let Err(e) = reader.read_exact_timeout(read_buf, read_timeout).await {
                     self.closed.store(true, Ordering::Release);
                     retry_with_err!(self, task, RPC_ERR_COMM);
@@ -478,7 +471,7 @@ where
                 }
             } // When msg_len == 0, read_buf has 0 size
             if blob_len > 0 {
-                match task.get_ext_buf_mut(blob_len as i32) {
+                match task.get_ext_buf_resp(blob_len as i32) {
                     None => {
                         logger_error!(
                             self.logger,
@@ -505,25 +498,18 @@ where
                     }
                 }
             }
+            logger_debug!(self.logger, "{:?} recv task {} ok", self, task);
             // set result of task, and notify task completed
-            match task.fill_task(&read_buf) {
-                Ok(_) => {
-                    logger_debug!(self.logger, "{:?} recv task {} ok", self, task);
-                    task.set_result(Ok(()));
-                }
-                Err(e) => {
-                    logger_warn!(self.logger, "{:?} recv task {} failed: {:?}", self, task, e);
-                    retry_with_err!(self, task, e);
-                }
-            }
+            task.set_result(Ok(&read_buf));
             return Ok(());
         } else {
+            let seq = resp_head.seq;
             logger_debug!(self.logger, "{:?} notifier take_task(seq={}) return None", self, seq);
             let mut data_len = 0;
-            if let Err(err_len) = rpc_head.get_error() {
-                data_len += err_len as u32;
-            } else {
-                data_len += rpc_head.msg_len + rpc_head.blob_len;
+            if resp_head.flag == 0 {
+                data_len += resp_head.msg_len + resp_head.blob_len;
+            } else if resp_head.flag == RESP_FLAG_HAS_ERR_STRING {
+                data_len += resp_head.blob_len;
             }
             return self._recv_and_dump(data_len as usize).await;
         }

@@ -10,7 +10,6 @@ use std::{
 use super::task::*;
 use crate::error::*;
 use crossfire::{SendError, channel::LockedWaker, mpsc};
-use nix::errno::Errno;
 use rustc_hash::FxHashMap;
 use sync_utils::waitgroup::WaitGroupGuard;
 
@@ -30,14 +29,6 @@ pub struct RpcTaskItem<T: RpcTask + Send + Unpin> {
     pub task: Option<T>,
     _upstream: Option<WaitGroupGuard>,
 }
-
-/*
-impl <T: RpcTask + Send + Unpin> Drop for RpcTaskItem <T>{
-
-    fn drop(&mut self) {
-    }
-}
-*/
 
 pub struct DelayTasksBatch<T: RpcTask + Send + Unpin> {
     tasks: FxHashMap<u64, RpcTaskItem<T>>,
@@ -230,12 +221,10 @@ impl<T: RpcTask + Send + Unpin> RpcTaskNotifier<T> {
                             min_seq = seq;
                         }
                     }
-                    if _task.action() > 0 {
-                        warn!(
-                            "task {} is timeout on client={}:{}",
-                            _task, self.server_id, self.client_id
-                        );
-                    }
+                    warn!(
+                        "task {} is timeout on client={}:{}",
+                        _task, self.server_id, self.client_id
+                    );
                     retry_with_err!(retry_tx, _task, RPCError::Rpc(ERR_TIMEOUT));
                 }
                 self.min_delay_seq = min_seq;
