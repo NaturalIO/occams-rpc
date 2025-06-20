@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-pub struct RPCConfig {
+pub struct RpcConfig {
     pub timeout: TimeoutSetting,
-    /// How many async RPCTask in the queue, prevent overflow server capacity
+    /// How many async RpcTask in the queue, prevent overflow server capacity
     pub thresholds: usize,
 }
 
-impl Default for RPCConfig {
+impl Default for RpcConfig {
     fn default() -> Self {
         Self { timeout: TimeoutSetting::default(), thresholds: 128 }
     }
@@ -14,7 +14,7 @@ impl Default for RPCConfig {
 
 #[derive(Clone, Copy)]
 pub struct TimeoutSetting {
-    /// timeout of RPCTask waiting for response, in seconds.
+    /// timeout of RpcTask waiting for response, in seconds.
     pub task_timeout: usize,
     /// socket read timeout
     pub read_timeout: Duration,

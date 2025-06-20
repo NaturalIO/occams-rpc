@@ -11,8 +11,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use super::{notifier::*, proto::*, task::*, throttler::*};
-use crate::{UnifyBufStream, UnifyStream};
+use super::{notifier::*, proto::*, throttler::*};
+use crate::net::{UnifyBufStream, UnifyStream};
 use crate::{config::*, error::*};
 use bytes::BytesMut;
 use captains_log::LogFilter;
@@ -23,6 +23,8 @@ use nix::errno::Errno;
 use sync_utils::{time::DelayedTime, waitgroup::WaitGroupGuard};
 use tokio::time::{Duration, Instant, Interval, interval_at, sleep};
 use zerocopy::AsBytes;
+
+use super::client_task::{RetryTaskInfo, RpcClientTask};
 
 macro_rules! retry_with_err {
     ($self:expr, $t:expr, $err:expr) => {
@@ -36,20 +38,20 @@ macro_rules! retry_with_err {
 }
 
 /// RpcClient represents a client-side connection. connection will close on dropped
-pub struct RpcClient<T: RpcClientTask + Send + Unpin + 'static> {
+pub struct RpcClient<T: RpcClientTask> {
     close_h: Option<mpsc::TxUnbounded<()>>,
     inner: Arc<RpcClientInner<T>>,
 }
 
 impl<T> RpcClient<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     /// timeout_setting: only use read_timeout/write_timeout
     pub fn new(
-        server_id: u64, client_id: u64, stream: UnifyStream, config: RPCConfig,
+        server_id: u64, client_id: u64, stream: UnifyStream, config: RpcConfig,
         retry_tx: Option<mpsc::TxUnbounded<Option<RetryTaskInfo<T>>>>,
-        last_resp_ts: Option<Arc<AtomicU64>>, logger: Option<Arc<LogFilter>>,
+        last_resp_ts: Option<Arc<AtomicU64>>, logger: Arc<LogFilter>,
     ) -> Self {
         let (_close_tx, _close_rx) = mpsc::unbounded_future::<()>();
         Self {
@@ -67,7 +69,7 @@ where
         }
     }
 
-    pub fn start_receiver(&self) {
+    pub fn start(&self) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
             inner.receive_loop().await;
@@ -131,7 +133,7 @@ where
 
 impl<T> Drop for RpcClient<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     fn drop(&mut self) {
         self.close_h.take();
@@ -143,7 +145,7 @@ where
 
 impl<T> fmt::Debug for RpcClient<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt(f)
@@ -152,7 +154,7 @@ where
 
 struct RpcClientInner<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     server_id: u64,
     client_id: u64,
@@ -170,13 +172,13 @@ where
     logger: Arc<LogFilter>,
 }
 
-unsafe impl<T> Send for RpcClientInner<T> where T: RpcClientTask + Send + Unpin + 'static {}
+unsafe impl<T> Send for RpcClientInner<T> where T: RpcClientTask {}
 
-unsafe impl<T> Sync for RpcClientInner<T> where T: RpcClientTask + Send + Unpin + 'static {}
+unsafe impl<T> Sync for RpcClientInner<T> where T: RpcClientTask {}
 
 impl<T> fmt::Debug for RpcClientInner<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "rpc client {}:{}", self.server_id, self.client_id)
@@ -185,19 +187,14 @@ where
 
 impl<T> RpcClientInner<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     pub fn new(
         server_id: u64, client_id: u64, stream: UnifyStream,
         retry_tx: Option<mpsc::TxUnbounded<Option<RetryTaskInfo<T>>>>,
-        close_h: mpsc::RxUnbounded<()>, config: RPCConfig, last_resp_ts: Option<Arc<AtomicU64>>,
-        mut logger: Option<Arc<LogFilter>>,
+        close_h: mpsc::RxUnbounded<()>, config: RpcConfig, last_resp_ts: Option<Arc<AtomicU64>>,
+        logger: Arc<LogFilter>,
     ) -> Self {
-        if let None = logger {
-            logger = Some(Arc::new(LogFilter::new()));
-            logger.as_mut().unwrap().set_level(log::Level::Trace);
-        }
-
         let mut client_inner = Self {
             server_id,
             client_id,
@@ -217,7 +214,7 @@ where
             throttler: None,
             last_resp_ts,
             has_err: AtomicBool::new(false),
-            logger: logger.unwrap(),
+            logger,
         };
 
         if config.thresholds > 0 {
@@ -661,7 +658,7 @@ where
 
 impl<T> Drop for RpcClientInner<T>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
 {
     fn drop(&mut self) {
         let notifier = self.get_notifier_mut();
@@ -671,7 +668,7 @@ where
 
 struct ReciverTimerFuture<'a, T, F>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
     F: Future<Output = Result<(), RpcError>> + Unpin,
 {
     client: &'a RpcClientInner<T>,
@@ -681,7 +678,7 @@ where
 
 impl<'a, T, F> ReciverTimerFuture<'a, T, F>
 where
-    T: RpcClientTask + Send + Unpin + 'static,
+    T: RpcClientTask,
     F: Future<Output = Result<(), RpcError>> + Unpin,
 {
     fn new(
@@ -696,7 +693,7 @@ where
 // Err(e) when connection error
 impl<'a, T, F> Future for ReciverTimerFuture<'a, T, F>
 where
-    T: RpcClientTask + Send + Unpin,
+    T: RpcClientTask,
     F: Future<Output = Result<(), RpcError>> + Unpin,
 {
     type Output = Result<(), RpcError>;

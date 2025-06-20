@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{UnifyBufStream, UnifyListener, UnifyStream};
+use crate::net::{UnifyBufStream, UnifyListener, UnifyStream};
 use bytes::BytesMut;
 use crossfire::mpsc::{RxUnbounded, TxUnbounded, unbounded_future};
 use futures::{
@@ -17,12 +17,30 @@ use futures::{
 };
 use zerocopy::AsBytes;
 
-use super::proto::*;
-use super::task::*;
+use super::{proto::*, *};
 use crate::config::TimeoutSetting;
 use crate::error::*;
 use captains_log::LogFilter;
 use io_engine::buffer::Buffer;
+
+/// A temporary struct to hold data buffer return by RpcSrvReader::recv_req().
+///
+/// NOTE: you should consume the buffer ref before recv another request.
+#[derive(Debug)]
+pub struct RpcSvrReq<'a> {
+    pub seq: u64,
+    pub action: RpcAction<'a>,
+    pub msg: Option<&'a [u8]>,
+    pub blob: Option<Buffer>, // for write, this contains data
+}
+
+/// A struct hold response message
+#[derive(Debug)]
+pub struct RpcSvrResp {
+    pub seq: u64,
+    /// On Ok((msg, blob))
+    pub res: Result<(Option<Vec<u8>>, Option<Buffer>), RpcError>,
+}
 
 #[async_trait]
 pub trait ServerConnFactory: Clone + Sync + Send + 'static {

@@ -20,7 +20,7 @@ use signal_hook::consts as signal_const;
 use signal_hook::iterator::Signals;
 use tokio::net::{TcpListener as TokioTcpListener, UnixListener as TokioUnixListener};
 
-use super::{UnifyAddr, UnifyListener};
+use super::net::{UnifyAddr, UnifyListener};
 
 pub fn write_pid_file(run_dir: &str, prog_name: &str) -> std::io::Result<()> {
     let pid_file_path = Path::new(run_dir).join(format!("{}.pid", prog_name));
@@ -135,9 +135,11 @@ impl Graceful {
     }
 
     /// Initiate socket listener which supports graceful restart.
-    pub fn new_unify_listeners(
+    /// We assume the program does not change addrs, always call with the same order.
+    pub fn new_unify_listener(
         &mut self, rt: &tokio::runtime::Runtime, unify_addr: &UnifyAddr,
     ) -> std::io::Result<UnifyListener> {
+        // XXX What if order wrong?
         if self.recover_listen_fds.len() > 0 {
             let raw_fd = self.recover_listen_fds.remove(0);
             match unify_addr {
