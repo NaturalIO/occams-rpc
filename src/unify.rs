@@ -1,3 +1,5 @@
+use nix::errno::Errno;
+use std::str::FromStr;
 use std::{
     fmt, fs, io,
     net::{AddrParseError, IpAddr, SocketAddr, ToSocketAddrs},
@@ -509,6 +511,25 @@ impl std::fmt::Display for UnifyBufStream {
             self.writer_buf_size,
             self.buf_stream.get_ref()
         );
+    }
+}
+
+pub async fn listen_on_addr(addr: &str) -> std::io::Result<UnifyListener> {
+    match UnifyAddr::from_str(addr) {
+        Err(_) => {
+            error!("Fail to parse addr {:?}", addr);
+            return Err(Errno::EFAULT.into());
+        }
+        Ok(listen_addr) => match UnifyListener::bind(&listen_addr).await {
+            Ok(listener) => {
+                info!("listen on {:?}", addr);
+                return Ok(listener);
+            }
+            Err(e) => {
+                error!("Fail to bind on addr {:?}: {:?}", listen_addr, e);
+                return Err(e);
+            }
+        },
     }
 }
 
