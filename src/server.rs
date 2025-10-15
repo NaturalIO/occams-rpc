@@ -1,27 +1,27 @@
 use io_buffer::Buffer;
 use occams_rpc_core::{Codec, error, error::RpcError};
-use occams_rpc_stream::server::{RespNoti, RespReceiver, ServerTaskDecode, ServerTaskEncode};
+use occams_rpc_stream::server::{RespNoti, RespReceiver};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
-struct Request<C: Codec> {
-    seq: u64,
-    service: String,
-    method: String,
-    req: Option<Vec<u8>>,
-    codec: Arc<C>,
-    noti: RespNoti<Response>,
+pub struct Request<C: Codec> {
+    pub seq: u64,
+    pub service: String,
+    pub method: String,
+    pub req: Option<Vec<u8>>,
+    pub codec: Arc<C>,
+    pub noti: RespNoti<Response>,
 }
 
 impl<C: Codec> Request<C> {
     #[inline]
-    fn decode<'a, R: Deserialize<'a>>(&'a mut self, buf: &'a [u8]) -> Result<R, ()> {
+    pub fn decode<'a, R: Deserialize<'a>>(&'a mut self, buf: &'a [u8]) -> Result<R, ()> {
         self.codec.decode::<R>(buf)
     }
 
     #[inline(always)]
-    fn set_result<R: Serialize>(self, resp: R) {
+    pub fn set_result<R: Serialize>(self, resp: R) {
         match self.codec.encode::<R>(&resp) {
             Err(()) => {
                 self.noti.done(Response {
@@ -37,16 +37,15 @@ impl<C: Codec> Request<C> {
     }
 
     #[inline(always)]
-    fn set_error(self, e: RpcError) {
+    pub fn set_error(self, e: RpcError) {
         self.noti.done(Response { seq: self.seq, msg: None, res: Err(e) });
     }
 }
 
 pub struct Response {
-    seq: u64,
-    msg: Option<Vec<u8>>,
-    // on ok, contains resp msg
-    res: Result<(), RpcError>,
+    pub seq: u64,
+    pub msg: Option<Vec<u8>>,
+    pub res: Result<(), RpcError>,
 }
 
 impl fmt::Debug for Response {
@@ -94,12 +93,12 @@ pub trait ServiceTrait<C: Codec>: Send + Sized + 'static {
     ///             }
     ///         }
     ///     }
-    fn serve(&self, req: Request<C>);
+    fn serve(&self, req: Request<C>) -> impl Future<Output = ()> + Send;
 }
 
 impl<S: ServiceTrait<C> + Sync + Send, C: Codec> ServiceTrait<C> for Arc<S> {
     #[inline]
-    fn serve(&self, req: Request<C>) {
+    fn serve(&self, req: Request<C>) -> impl Future<Output = ()> + Send {
         self.as_ref().serve(req)
     }
 }
