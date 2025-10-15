@@ -348,7 +348,7 @@ impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
     }
 }
 
-/// RespReceiver for the API interface
+/// RespReceiver for pre encoded resp [RpcSvrResp]
 pub struct RespReceiverBuf();
 impl RespReceiver for RespReceiverBuf {
     type ChannelItem = RpcSvrResp;

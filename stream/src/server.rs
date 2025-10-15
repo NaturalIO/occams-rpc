@@ -100,7 +100,7 @@ pub struct RpcSvrReq<'a> {
     pub blob: Option<Buffer>, // for write, this contains data
 }
 
-/// A temporary struct to hold data buffer for RespReceiverBuf
+/// A temporary struct to hold pre encoded buffer for RespReceiverBuf
 #[derive(Debug)]
 pub struct RpcSvrResp {
     pub seq: u64,
@@ -143,8 +143,7 @@ pub trait ReqDispatch<R: RespReceiver>: Send + Sync + Sized + 'static {
 ///
 /// There are two types of implement:
 /// - [crate::server_impl::RespReceiverTask]: When you have all types of server response tasks in one enum type.
-/// - [crate::server_impl::RespReceiverBuf]: When you have an API call server, or different types of
-/// task handled by different worker pools.
+/// - [crate::server_impl::RespReceiverBuf]: When you have different types of task handled by different worker pools.
 /// Task can be encoded to RpcSvrResp before sent into channel.
 pub trait RespReceiver: Send + 'static {
     type ChannelItem: Send + Unpin + 'static + fmt::Debug;
@@ -208,6 +207,9 @@ pub trait ServerTaskEncode {
 }
 
 /// How to notify Rpc framework when a task is done
+///
+/// This is not mandatory for the framework, this a guideline,
+/// You can skip this as long as you send the result back to RespNoti.
 pub trait ServerTaskDone<T: Send + 'static>: Sized + 'static {
     /// Should implement for enum delegation, not intended for user call
     fn _set_result(&mut self, res: Result<(), RpcError>) -> RespNoti<T>;
