@@ -30,6 +30,10 @@ test-core: init
 test-stream-macros: init
 	cargo test -p occams-rpc-stream-macros
 
+.PHONY: test-api-macros
+test-api-macros: init
+	cargo test -p occams-rpc-api-macros
+
 # usage:
 # make test-stream "test_normal --features tokio"
 # make test-stream "test_normal --features smol"
