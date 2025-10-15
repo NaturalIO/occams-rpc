@@ -31,18 +31,120 @@ The `ServiceTrait::serve(req)` should:
 
 ### service `#[service]`
 
-When Apply #[service] on a struct, service method should be mark as #[method].
-When Apply #[service(SomeTrait)] on a struct, will register service method defined by SomeTrait.
+The `#[service]` macro is applied to an `impl` block to automatically generate the `ServiceTrait` implementation for the type.
 
-the service method regconizes:
+-   When applied to an inherent `impl` block, methods intended as service methods should be marked with `#[method]`.
+-   When applied to a trait `impl` block, all methods defined in the trait will be registered as service methods (no `#[method]` marker needed).
+
+The service method recognizes:
 - `fn` (which consider non-block)
 - `async fn`
 - `impl Future`
 - trait methods wrapped by `async_trait`
 
-the macro will iterate all methods and generate a ServiceTrait::serve() implement.
+The macro will iterate all methods and generate a `ServiceTrait::serve()` implementation.
+
+#### Example: Inherent `impl`
+
+```rust
+use occams_rpc_api_macros::{method, service};
+use occams_rpc_core::error::RpcError;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MyArg {
+    pub value: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MyResp {
+    pub result: u32,
+}
+
+#[derive(Clone)]
+pub struct MyServiceInherentImpl;
+
+#[service]
+impl MyServiceInherentImpl {
+    #[method]
+    async fn mul(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value * 2 })
+    }
+
+    #[method]
+    fn div(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value / 2 })
+    }
+}
+```
+
+#### Example: Trait `impl`
+
+```rust
+use occams_rpc_api_macros::service;
+use occams_rpc_core::error::RpcError;
+use serde::{Deserialize, Serialize};
+use std::future::Future;
+
+// Assuming MyArg and MyResp are defined as above
+
+pub trait MyService {
+    fn add(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError>> + Send;
+    fn sub(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError>> + Send;
+}
+
+#[derive(Clone)]
+pub struct MyServiceTraitImpl;
+
+#[service]
+impl MyService for MyServiceTraitImpl {
+    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value + 10 })
+    }
+
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value - 10 })
+    }
+}
+```
 
 ### service multiplexer `#[service_enum]`
 
-impl a ServiceTrait on a enum, which dispatch serve() to it's variants
+The `#[service_enum]` macro is applied to an enum to implement `ServiceTrait` on it, which dispatches `serve()` calls to its variants. Each variant must be a newtype variant holding a service that implements `ServiceTrait`.
+
+#### Example: Service Enum
+
+```rust
+use occams_rpc_api_macros::{service, service_enum};
+use occams_rpc_core::error::RpcError;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+// Assuming MyArg and MyResp are defined as above
+
+#[derive(Clone)]
+pub struct MyServiceImpl;
+
+pub trait MyService {
+    fn add(&self, arg: MyArg) -> impl std::future::Future<Output = Result<MyResp, RpcError>> + Send;
+    fn sub(&self, arg: MyArg) -> impl std::future::Future<Output = Result<MyResp, RpcError>> + Send;
+}
+
+#[service]
+impl MyService for MyServiceImpl {
+    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value + 1 })
+    }
+
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+        Ok(MyResp { result: arg.value - 1 })
+    }
+}
+
+#[service_enum]
+pub enum MyServices {
+    AddService(Arc<MyServiceImpl>),
+    SubService(Arc<MyServiceImpl>),
+}
+```
 

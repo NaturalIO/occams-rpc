@@ -1,0 +1,23 @@
+[package]
+name = "occams-rpc-api-macros"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dev-dependencies]
+occams-rpc-core = { path = "../core", version="0" }
+occams-rpc-codec = { path = "../codec", version="0", features=["msgpack"] }
+occams-rpc-stream = { path = "../stream", version="0" }
+occams-rpc = { path = "../", version = "0" }
+serde = { version = "1.0", features = ["derive"] }
+rmp-serde = "0.15"
+crossfire = "2.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+async-trait = "0.1"
