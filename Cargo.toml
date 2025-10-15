@@ -20,6 +20,11 @@ with a low-level streaming interface, and high-level remote API call interface.
 [dependencies]
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
+io-buffer = "1"
+serde = "1"
+occams-rpc-core = {path="core/", version="0"}
+occams-rpc-codec = {path="codec/", version="0"}
+occams-rpc-stream = {path="stream/", version="0"}
 
 [features]
 default = []
