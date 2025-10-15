@@ -51,6 +51,7 @@ build: init
 	cargo build -p occams-rpc-stream
 	cargo build -p occams-rpc-tcp
 	cargo build -p stream_test
+	cargo build
 
 .DEFAULT_GOAL = build
 
