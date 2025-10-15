@@ -194,7 +194,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
             impl occams_rpc_stream::client::ClientTaskDone for #struct_name {
                 #[inline]
-                fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError> {
+                fn get_result(&self) -> Result<(), &occams_rpc_core::error::ServerErr> {
                     match self.#res_field_name.as_ref() {
                         Some(Ok(()))=>return Ok(()),
                         Some(Err(e))=>return Err(e),
@@ -203,7 +203,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                fn set_result(mut self, res: Result<(), occams_rpc_core::error::RpcError>) {
+                fn set_result(mut self, res: Result<(), occams_rpc_core::error::ServerErr>) {
                     self.#res_field_name.replace(res);
                     let noti = self.#noti_field_name.take().unwrap();
                     let _ = noti.send(self.into());
@@ -324,7 +324,7 @@ fn test_missing_resp() {}
 /// ```compile_fail
 /// use occams_rpc_stream_macros::*;
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::RpcError;
+/// use occams_rpc_core::error::ServerErr;
 ///
 /// #[client_task]
 /// pub struct MissingNotiField {
@@ -335,7 +335,7 @@ fn test_missing_resp() {}
 ///     #[field(resp)]
 ///     resp: Option<()>,
 ///     #[field(res)]
-///     res: Option<Result<(), RpcError>>,
+///     res: Option<Result<(), ServerErr>>,
 /// }
 /// ```
 #[doc(hidden)]
@@ -345,7 +345,7 @@ fn test_missing_noti_field() {}
 /// ```compile_fail
 /// use occams_rpc_stream_macros::*;
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::RpcError;
+/// use occams_rpc_core::error::ServerErr;
 /// use crossfire::MTx;
 ///
 /// #[client_task]

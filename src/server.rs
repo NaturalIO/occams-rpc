@@ -1,5 +1,5 @@
 use io_buffer::Buffer;
-use occams_rpc_core::{Codec, error, error::RpcError};
+use occams_rpc_core::{Codec, error, error::ServerErr};
 use occams_rpc_stream::server::{RespNoti, RespReceiver};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -27,7 +27,7 @@ impl<C: Codec> Request<C> {
                 self.noti.done(Response {
                     seq: self.seq,
                     msg: None,
-                    res: Err(error::RPC_ERR_ENCODE),
+                    res: Err(error::RpcIntErr::Encode.into()),
                 });
             }
             Ok(msg) => {
@@ -37,7 +37,7 @@ impl<C: Codec> Request<C> {
     }
 
     #[inline(always)]
-    pub fn set_error(self, e: RpcError) {
+    pub fn set_error(self, e: ServerErr) {
         self.noti.done(Response { seq: self.seq, msg: None, res: Err(e) });
     }
 }
@@ -45,7 +45,7 @@ impl<C: Codec> Request<C> {
 pub struct Response {
     pub seq: u64,
     pub msg: Option<Vec<u8>>,
-    pub res: Result<(), RpcError>,
+    pub res: Result<(), ServerErr>,
 }
 
 impl fmt::Debug for Response {
@@ -63,7 +63,7 @@ impl RespReceiver for RespReceiverAPI {
     #[inline]
     fn encode_resp<'a, C: Codec>(
         _codec: &'a C, item: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         match &mut item.res {
             Ok(()) => {
                 let msg = item.msg.take().unwrap();

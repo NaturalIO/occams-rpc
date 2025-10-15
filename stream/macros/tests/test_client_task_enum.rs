@@ -18,7 +18,7 @@ struct TaskA {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
 }
@@ -32,7 +32,7 @@ struct TaskB {
     #[field(resp)]
     resp: Option<u32>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
 }
@@ -50,7 +50,7 @@ struct TaskC {
     #[field(resp_blob)]
     resp_blob: Option<Vec<u8>>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
 }
@@ -141,7 +141,7 @@ struct TaskActionOverwrite {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }
@@ -155,7 +155,7 @@ struct TaskActionDelegate {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }
@@ -169,7 +169,7 @@ struct TaskBWithAction {
     #[field(resp)]
     resp: Option<u32>,
     #[field(res)]
-    res: Option<Result<(), RpcError>>,
+    res: Option<Result<(), ServerErr>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }

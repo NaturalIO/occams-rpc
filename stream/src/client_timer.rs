@@ -89,7 +89,7 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
         for key in task_seqs {
             let mut task_item = self.sent_tasks.remove(&key).unwrap();
             let task = task_item.task.take().unwrap();
-            factory.error_handle(task, RPC_ERR_CLOSED);
+            factory.error_handle(task, RpcIntErr::IO);
         }
         for tasks_batch_in_second in self.delay_tasks_queue.iter_mut() {
             let mut task_seqs: Vec<u64> = Vec::with_capacity(tasks_batch_in_second.tasks.len());
@@ -99,7 +99,7 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
             for key in task_seqs {
                 let mut task_item = tasks_batch_in_second.tasks.remove(&key).unwrap();
                 let task = task_item.task.take().unwrap();
-                factory.error_handle(task, RPC_ERR_CLOSED);
+                factory.error_handle(task, RpcIntErr::IO);
             }
         }
     }
@@ -216,7 +216,7 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
                         "task {:?} is timeout on client={}:{}",
                         _task, self.server_id, self.client_id
                     );
-                    factory.error_handle(_task, RpcError::Rpc(ERR_TIMEOUT));
+                    factory.error_handle(_task, RpcIntErr::Timeout);
                 }
                 self.min_delay_seq = min_seq;
             }

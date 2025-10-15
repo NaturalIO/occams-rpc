@@ -124,7 +124,7 @@ where
                                 let seq = req.seq;
                                 if self.dispatch.dispatch_req(req, self.noti.clone()).await.is_err()
                                 {
-                                    self.send_quick_resp(seq, Some(RPC_ERR_DECODE))?;
+                                    self.send_quick_resp(seq, Some(RpcIntErr::Decode.into()))?;
                                 }
                             }
                         }
@@ -136,7 +136,7 @@ where
             }
 
             #[inline]
-            fn send_quick_resp(&self, seq: u64, err: Option<RpcError>) -> Result<(), ()> {
+            fn send_quick_resp(&self, seq: u64, err: Option<ServerErr>) -> Result<(), ()> {
                 if self.noti.send_err(seq, err).is_err() {
                     logger_warn!(
                         self.conn.get_logger(),
@@ -158,7 +158,7 @@ where
 
         struct Writer<F: ServerFactory, D: ReqDispatch<R>, R: RespReceiver> {
             dispatch: Arc<D>,
-            done_rx: crossfire::AsyncRx<Result<R::ChannelItem, (u64, Option<RpcError>)>>,
+            done_rx: crossfire::AsyncRx<Result<R::ChannelItem, (u64, Option<ServerErr>)>>,
             conn: Arc<F::Transport>,
         }
 
@@ -329,7 +329,7 @@ where
     #[inline]
     fn encode_resp<'a>(
         &'a self, task: &'a mut R::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         R::encode_resp::<C>(&self.codec, task)
     }
 }
@@ -343,7 +343,7 @@ impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
     #[inline]
     fn encode_resp<'a, C: Codec>(
         codec: &'a C, task: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         task.encode_resp(codec)
     }
 }
@@ -356,7 +356,7 @@ impl RespReceiver for RespReceiverBuf {
     #[inline]
     fn encode_resp<'a, C: Codec>(
         _codec: &'a C, item: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         match &mut item.res {
             Ok(()) => {
                 let msg = item.msg.take().unwrap();
@@ -380,7 +380,7 @@ where
     pub action: RpcActionOwned,
     pub msg: M,
     pub blob: Option<Buffer>,
-    pub res: Option<Result<(), RpcError>>,
+    pub res: Option<Result<(), ServerErr>>,
     pub noti: Option<RespNoti<T>>,
 }
 
@@ -399,7 +399,7 @@ where
     T: Send + Unpin + 'static,
     M: Send + Unpin + 'static,
 {
-    fn _set_result(&mut self, res: Result<(), RpcError>) -> RespNoti<T> {
+    fn _set_result(&mut self, res: Result<(), ServerErr>) -> RespNoti<T> {
         self.res.replace(res);
         return self.noti.take().unwrap();
     }
@@ -436,7 +436,7 @@ where
 {
     fn encode_resp<'a, C: Codec>(
         &'a self, codec: &'a C,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         if let Some(res) = self.res.as_ref() {
             match codec.encode(&self.msg) {
                 Err(_) => {
@@ -473,7 +473,7 @@ where
     pub req_blob: Option<Buffer>,
     pub resp: Option<P>,
     pub resp_blob: Option<Buffer>,
-    pub res: Option<Result<(), RpcError>>,
+    pub res: Option<Result<(), ServerErr>>,
     noti: Option<RespNoti<T>>,
 }
 
@@ -494,7 +494,7 @@ where
     R: Send + Unpin + 'static,
     P: Send + Unpin + 'static,
 {
-    fn _set_result(&mut self, res: Result<(), RpcError>) -> RespNoti<T> {
+    fn _set_result(&mut self, res: Result<(), ServerErr>) -> RespNoti<T> {
         self.res.replace(res);
         return self.noti.take().unwrap();
     }
@@ -543,7 +543,7 @@ where
 {
     fn encode_resp<'a, C: Codec>(
         &'a self, codec: &'a C,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>) {
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
         if let Some(res) = self.res.as_ref() {
             if let Some(resp) = self.resp.as_ref() {
                 match codec.encode(resp) {

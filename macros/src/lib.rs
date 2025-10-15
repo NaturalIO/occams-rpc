@@ -94,14 +94,14 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #method_name_str => {
                         let arg = match req.req.as_ref() {
                             None => {
-                                req.set_error(occams_rpc_core::error::RPC_ERR_DECODE);
+                                req.set_error(occams_rpc_core::error::RpcIntErr::Decode.into());
                                 return;
                             }
                             Some(buf) => {
                                 match req.codec.decode::<#arg_ty>(&buf) {
                                     Ok(arg) => arg,
                                     Err(_) => {
-                                        req.set_error(occams_rpc_core::error::RPC_ERR_DECODE);
+                                        req.set_error(occams_rpc_core::error::RpcIntErr::Decode.into());
                                         return;
                                     }
                                 }
@@ -133,7 +133,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             match req.method.as_str() {
                                 #(#method_handlers)*
                                 _ => {
-                                    req.set_error(occams_rpc_core::error::RPC_ERR_METHOD_NOT_FOUND);
+                                    req.set_error(occams_rpc_core::error::RpcIntErr::Method.into());
                                 }
                             }
                         }

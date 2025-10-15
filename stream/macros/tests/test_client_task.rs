@@ -355,7 +355,7 @@ fn test_client_task_macro_with_done() {
         #[field(resp)]
         resp: Option<()>,
         #[field(res)]
-        res: Option<Result<(), RpcError>>,
+        res: Option<Result<(), ServerErr>>,
         #[field(noti)]
         noti: Option<MTx<Self>>,
     }
@@ -389,13 +389,13 @@ fn test_client_task_macro_with_done() {
     };
     assert_eq!(task_err.get_result(), Err(&RPC_ERR_INTERNAL));
 
-    task_err.set_result(Err(RpcError::Num(2)));
+    task_err.set_result(Err(ServerErr::Num(2)));
 
     let received_task_err = done_rx.recv().unwrap();
     assert_eq!(received_task_err.common.seq, 2);
-    assert_eq!(received_task_err.res, Some(Err(RpcError::Num(2))));
+    assert_eq!(received_task_err.res, Some(Err(ServerErr::Num(2))));
     assert!(received_task_err.noti.is_none());
-    assert_eq!(received_task_err.get_result(), Err(&RpcError::Num(2)));
+    assert_eq!(received_task_err.get_result(), Err(&ServerErr::Num(2)));
 }
 
 #[test]

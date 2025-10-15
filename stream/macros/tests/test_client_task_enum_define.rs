@@ -3,7 +3,7 @@
 #[allow(dead_code)]
 fn test_client_task_enum_define() {
     use crossfire::MTx;
-    use occams_rpc_core::error::RpcError;
+    use occams_rpc_core::error::ServerErr;
     use occams_rpc_stream::client::ClientTaskCommon;
     use occams_rpc_stream_macros::{client_task, client_task_enum};
 
@@ -23,7 +23,7 @@ fn test_client_task_enum_define() {
         #[field(resp)]
         resp: Option<()>,
         #[field(res)]
-        res: Option<Result<(), RpcError>>,
+        res: Option<Result<(), ServerErr>>,
         #[field(noti)]
         noti: Option<MTx<FileTask>>,
     }
@@ -37,7 +37,7 @@ fn test_client_task_enum_define() {
         #[field(resp)]
         resp: Option<()>,
         #[field(res)]
-        res: Option<Result<(), RpcError>>,
+        res: Option<Result<(), ServerErr>>,
         #[field(noti)]
         noti: Option<MTx<FileTask>>,
     }

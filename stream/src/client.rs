@@ -5,7 +5,11 @@ use crate::proto::RpcAction;
 use captains_log::filter::Filter;
 use crossfire::MAsyncRx;
 pub use occams_rpc_core::ClientConfig;
-use occams_rpc_core::{Codec, error::RpcError, runtime::AsyncIO};
+use occams_rpc_core::{
+    Codec,
+    error::{RpcIntErr, ServerErr},
+    runtime::AsyncIO,
+};
 use std::fmt;
 use std::future::Future;
 use std::io;
@@ -58,11 +62,11 @@ pub trait ClientFactory: Send + Sync + Sized + 'static {
     fn new_logger(&self, client_id: u64, server_id: u64) -> Self::Logger;
     /// TODO Fix the logger interface
 
-    /// How to deal with RpcError
+    /// How to deal with ServerErr
     ///
     /// You can overwrite this to implement retry logic
-    fn error_handle(&self, task: Self::Task, err: RpcError) {
-        task.set_result(Err(err));
+    fn error_handle<E: Into<ServerErr>>(&self, task: Self::Task, err: E) {
+        task.set_result(Err(err.into()));
     }
 
     /// You can overwrite this to assign a client_id
@@ -81,7 +85,7 @@ pub trait ClientTransport<F: ClientFactory>: fmt::Debug + Send + Sized + 'static
     /// How to establish an async connection.
     fn connect(
         addr: &str, config: &ClientConfig, client_id: u64, server_id: u64, logger: F::Logger,
-    ) -> impl Future<Output = Result<Self, RpcError>> + Send;
+    ) -> impl Future<Output = Result<Self, RpcIntErr>> + Send;
 
     /// The ClientTransport holds a logger, the server will use it by reference.
     fn get_logger(&self) -> &F::Logger;
@@ -102,7 +106,7 @@ pub trait ClientTransport<F: ClientFactory>: fmt::Debug + Send + Sized + 'static
     fn read_resp(
         &self, factory: &F, codec: &F::Codec, close_ch: Option<&MAsyncRx<()>>,
         task_reg: &mut ClientTaskTimer<F>,
-    ) -> impl std::future::Future<Output = Result<bool, RpcError>> + Send;
+    ) -> impl std::future::Future<Output = Result<bool, ServerErr>> + Send;
 }
 
 /// Sum up trait for client task, including request and response
@@ -148,11 +152,11 @@ pub trait ClientTaskDecode {
 /// How to notify from Rpc framework to user when a task is done
 pub trait ClientTaskDone: Sized + 'static {
     /// Check the result of the task
-    fn get_result(&self) -> Result<(), &RpcError>;
+    fn get_result(&self) -> Result<(), &ServerErr>;
 
     /// Set the result and notify outside the task is done.
     /// Called by RPC framework
-    fn set_result(self, res: Result<(), RpcError>);
+    fn set_result(self, res: Result<(), ServerErr>);
 }
 
 /// Get RpcAction from a enum task, or a sub-type that fits multiple RpcActions

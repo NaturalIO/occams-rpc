@@ -82,7 +82,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
     /// NOTE: you should consume the buffer ref before recv another request.
     async fn read_req<'a>(
         &'a self, close_ch: &crossfire::MAsyncRx<()>,
-    ) -> Result<RpcSvrReq<'a>, RpcError> {
+    ) -> Result<RpcSvrReq<'a>, ServerErr> {
         let reader = self.get_stream_mut();
         let read_timeout = self.config.read_timeout;
         let idle_timeout = self.config.idle_timeout;
@@ -92,11 +92,11 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
         match Cancellable::new(reader.read_exact(&mut req_header_buf), cancel_f).await {
             Ok(Err(e)) => {
                 logger_debug!(self.logger, "{:?}: recv_req: err {}", self, e);
-                return Err(RPC_ERR_COMM);
+                return Err(RpcIntErr::IO.into());
             }
             Err(()) => {
                 logger_trace!(self.logger, "{:?}: read timeout", self);
-                return Err(RPC_ERR_TIMEOUT);
+                return Err(RpcIntErr::Timeout.into());
             }
             _ => {}
         }
@@ -104,7 +104,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
         match proto::ReqHead::decode_head(&req_header_buf) {
             Err(e) => {
                 logger_warn!(self.logger, "{:?}: decode_head error, {}", self, e);
-                return Err(RPC_ERR_COMM);
+                return Err(RpcIntErr::Decode.into());
             }
             Ok(head) => {
                 rpc_head = head;
@@ -120,14 +120,14 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                 match io_with_timeout!(F::IO, read_timeout, reader.read_exact(action_buf)) {
                     Err(e) => {
                         logger_trace!(self.logger, "{:?}: read_exact error {}", self, e);
-                        return Err(RPC_ERR_COMM);
+                        return Err(RpcIntErr::IO.into());
                     }
                     Ok(_) => {
                         match std::str::from_utf8(action_buf) {
                             Ok(s) => RpcAction::Str(s),
                             Err(_) => {
                                 error!("{:?}: read action string decode error", self);
-                                return Err(RPC_ERR_DECODE);
+                                return Err(RpcIntErr::Decode.into());
                                 // XXX stop reading or consume junk data?
                             }
                         }
@@ -141,13 +141,13 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
         if rpc_head.msg_len > 0 {
             if let Err(e) = io_with_timeout!(F::IO, read_timeout, reader.read_exact(msg_buf)) {
                 logger_trace!(self.logger, "{:?}: read req msg error: {:?}", self, e);
-                return Err(RPC_ERR_COMM);
+                return Err(RpcIntErr::IO.into());
             }
         }
         let mut blob: Option<Buffer> = None;
         if rpc_head.blob_len > 0 {
             match Buffer::alloc(rpc_head.blob_len as i32) {
-                Err(_) => return Err(RPC_ERR_ENCODE),
+                Err(_) => return Err(RpcIntErr::Decode.into()),
                 Ok(mut ext_buf) => {
                     match io_with_timeout!(F::IO, read_timeout, reader.read_exact(&mut ext_buf)) {
                         Err(e) => {
@@ -157,7 +157,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                                 self,
                                 e
                             );
-                            return Err(RPC_ERR_COMM);
+                            return Err(RpcIntErr::IO.into());
                         }
                         Ok(_) => {
                             blob = Some(ext_buf);
@@ -171,7 +171,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
 
     #[inline]
     async fn write_resp<'a>(
-        &self, seq: u64, res: Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>,
+        &self, seq: u64, res: Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
         let write_timeout = self.config.write_timeout;

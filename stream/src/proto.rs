@@ -146,24 +146,17 @@ impl ReqHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcError> {
-        let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
-        match _head {
-            None => {
-                return Err(RPC_ERR_COMM);
-            }
-            Some(head) => {
-                if head.magic != RPC_MAGIC {
-                    warn!("rpc server: wrong magic receive {:?}", head.magic);
-                    return Err(RPC_ERR_COMM);
-                }
-                if head.ver != 1 {
-                    warn!("rpc server: version {} not supported", head.ver);
-                    return Err(RpcError::Rpc(ERR_NOT_SUPPORTED));
-                }
-                return Ok(head);
-            }
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, ServerErr> {
+        let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
+        if head.magic != RPC_MAGIC {
+            warn!("rpc server: wrong magic receive {:?}", head.magic);
+            return Err(RpcIntErr::IO.into());
         }
+        if head.ver != 1 {
+            warn!("rpc server: version {} not supported", head.ver);
+            return Err(RpcIntErr::Version.into());
+        }
+        return Ok(head);
     }
 
     #[inline]
@@ -245,25 +238,31 @@ pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
 
 impl RespHead {
     #[inline]
-    pub fn encode_err<'a>(seq: u64, err: &'a RpcError) -> (Self, Option<&'a [u8]>) {
+    pub fn encode_err<'a>(seq: u64, err: &'a ServerErr) -> (Self, Option<&'a [u8]>) {
         let error_str: &[u8];
         match err {
-            RpcError::Num(errno) => {
+            ServerErr::Num(n) => {
                 let header = RespHead {
                     magic: RPC_MAGIC,
                     ver: 1,
                     flag: RESP_FLAG_HAS_ERRNO,
                     seq,
-                    msg_len: *errno,
+                    msg_len: *n as u32,
                     blob_len: 0,
                 };
                 return (header, None);
             }
-            RpcError::Text(s) => {
+            ServerErr::Text(s) => {
                 error_str = s.as_bytes();
             }
-            RpcError::Rpc(s) => {
+            ServerErr::Str(s) => {
                 error_str = s.as_bytes();
+            }
+            ServerErr::Rpc(s) => {
+                error_str = s.as_bytes();
+            }
+            ServerErr::Buf(s) => {
+                error_str = &s;
             }
         }
         let header = RespHead {
@@ -295,24 +294,17 @@ impl RespHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcError> {
-        let _head: Option<&Self> = unsafe { transmute(head_buf.as_ptr()) };
-        match _head {
-            None => {
-                return Err(RPC_ERR_COMM);
-            }
-            Some(head) => {
-                if head.magic != RPC_MAGIC {
-                    warn!("rpc server: wrong magic receive {:?}", head.magic);
-                    return Err(RPC_ERR_COMM);
-                }
-                if head.ver != 1 {
-                    warn!("rpc server: version {} not supported", head.ver);
-                    return Err(RpcError::Rpc(ERR_NOT_SUPPORTED));
-                }
-                return Ok(head);
-            }
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, ServerErr> {
+        let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
+        if head.magic != RPC_MAGIC {
+            warn!("rpc server: wrong magic receive {:?}", head.magic);
+            return Err(RpcIntErr::IO.into());
         }
+        if head.ver != 1 {
+            warn!("rpc server: version {} not supported", head.ver);
+            return Err(RpcIntErr::Version.into());
+        }
+        return Ok(head);
     }
 }
 

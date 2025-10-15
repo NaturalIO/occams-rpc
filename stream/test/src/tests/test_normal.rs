@@ -4,7 +4,7 @@ use crate::*;
 use crossfire::mpsc;
 use io_buffer::{Buffer, rand_buffer}; // Added rand_buffer
 use occams_rpc_stream::client::{ClientConfig, ClientTaskDone};
-use occams_rpc_stream::error::RpcError;
+use occams_rpc_stream::error::RpcIntErr;
 use occams_rpc_stream::proto::RpcAction;
 use occams_rpc_stream::server::{ServerConfig, ServerTaskAction, ServerTaskDone};
 
@@ -75,9 +75,7 @@ fn test_client_server(runner: TestRunner, #[case] is_tcp: bool) {
                                             io_task.set_result(Ok(()));
                                         } else {
                                             log::error!("Write task received without blob data.");
-                                            io_task.set_result(Err(RpcError::Text(
-                                                "No data to write".to_string(),
-                                            )));
+                                            io_task.set_result(Err("No data to write".into()));
                                         }
                                         Ok(())
                                     }
@@ -86,9 +84,7 @@ fn test_client_server(runner: TestRunner, #[case] is_tcp: bool) {
                             }
                             _ => {
                                 log::error!("Unexpected RpcAction type for IO task.");
-                                io_task.set_result(Err(RpcError::Text(
-                                    "Unexpected RpcAction type".to_string(),
-                                )));
+                                io_task.set_result(Err(RpcIntErr::Method.into()));
                                 Err(())
                             }
                         }

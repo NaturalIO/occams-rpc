@@ -1,5 +1,5 @@
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::{Codec, error::RpcError};
+use occams_rpc_core::{Codec, error::ServerErr};
 use occams_rpc_stream::{
     proto::{RpcAction, RpcActionOwned},
     server::{
@@ -157,12 +157,12 @@ fn test_server_task_enum_resp_macro() {
     let mut task1_for_encode = ExampleServerTaskResp::Task1(variant1);
     <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp>>::_set_result(
         &mut task1_for_encode,
-        Err(RpcError::Text("some error".to_string())),
+        Err(ServerErr::Text("some error".to_string())),
     );
     let (seq1, resp1) =
         <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(&task1_for_encode, &codec);
     assert_eq!(seq1, 123);
-    assert_eq!(resp1.unwrap_err(), &RpcError::Text("some error".to_string()));
+    assert_eq!(resp1.unwrap_err(), &ServerErr::Text("some error".to_string()));
 
     let mut task2_for_encode = ExampleServerTaskResp::Task2(variant2);
     <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp>>::_set_result(

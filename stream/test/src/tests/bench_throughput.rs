@@ -5,7 +5,6 @@ use crossfire::mpsc;
 use io_buffer::{Buffer, rand_buffer};
 use occams_rpc_codec::MsgpCodec;
 use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskEncode};
-use occams_rpc_stream::error::RpcError;
 use occams_rpc_stream::proto::{RPC_REQ_HEADER_LEN, RpcAction};
 use occams_rpc_stream::server::{ServerConfig, ServerTaskAction, ServerTaskDone};
 use std::convert::TryFrom;
@@ -37,7 +36,7 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
                             io_task.resp = Some(FileIOResp { ret_size });
                             io_task.set_result(Ok(()));
                         } else {
-                            io_task.set_result(Err(RpcError::Text("No data to write".to_string())))
+                            io_task.set_result(Err("No data to write".into()));
                         }
                         Ok(())
                     }

@@ -74,11 +74,11 @@ pub trait ServerTransport<F: ServerFactory>: Send + Sync + Sized + 'static + fmt
     /// Read a request from the socket
     fn read_req<'a>(
         &'a self, close_ch: &crossfire::MAsyncRx<()>,
-    ) -> impl Future<Output = Result<RpcSvrReq<'a>, RpcError>> + Send;
+    ) -> impl Future<Output = Result<RpcSvrReq<'a>, ServerErr>> + Send;
 
     /// Write out the encoded request task
     fn write_resp<'a>(
-        &self, seq: u64, res: Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>,
+        &self, seq: u64, res: Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Flush the response for the socket writer, if the transport has buffering logic
@@ -109,7 +109,7 @@ pub struct RpcSvrResp {
 
     pub blob: Option<Buffer>,
 
-    pub res: Result<(), RpcError>,
+    pub res: Result<(), ServerErr>,
 }
 
 /// ReqDispatch should be a user-defined struct initialized for every connection, by ServerFactory::new_dispatcher.
@@ -136,7 +136,7 @@ pub trait ReqDispatch<R: RespReceiver>: Send + Sync + Sized + 'static {
     /// Called from the response writer
     fn encode_resp<'a>(
         &'a self, task: &'a mut R::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>);
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>);
 }
 
 /// Trait to be incorporated in ReqDispatch trait, which defined the response channel item type.
@@ -154,7 +154,7 @@ pub trait RespReceiver: Send + 'static {
     /// by &mut, but this does not affect encoding.
     fn encode_resp<'a, C: Codec>(
         codec: &'a C, task: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>);
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>);
 }
 
 /// A writer channel to send response to the server framework.
@@ -162,7 +162,7 @@ pub trait RespReceiver: Send + 'static {
 /// It can be cloned anywhere.
 /// The user doesn't need to call it directly.
 pub struct RespNoti<T: Send + 'static>(
-    pub(crate) crossfire::MTx<Result<T, (u64, Option<RpcError>)>>,
+    pub(crate) crossfire::MTx<Result<T, (u64, Option<ServerErr>)>>,
 );
 
 impl<T: Send + 'static> Clone for RespNoti<T> {
@@ -173,7 +173,7 @@ impl<T: Send + 'static> Clone for RespNoti<T> {
 }
 
 impl<T: Send + 'static> RespNoti<T> {
-    pub fn new(tx: crossfire::MTx<Result<T, (u64, Option<RpcError>)>>) -> Self {
+    pub fn new(tx: crossfire::MTx<Result<T, (u64, Option<ServerErr>)>>) -> Self {
         Self(tx)
     }
 
@@ -183,7 +183,7 @@ impl<T: Send + 'static> RespNoti<T> {
     }
 
     #[inline]
-    pub(crate) fn send_err(&self, seq: u64, err: Option<RpcError>) -> Result<(), ()> {
+    pub(crate) fn send_err(&self, seq: u64, err: Option<ServerErr>) -> Result<(), ()> {
         if self.0.send(Err((seq, err))).is_err() { return Err(()) } else { Ok(()) }
     }
 }
@@ -203,7 +203,7 @@ pub trait ServerTaskDecode<R: Send + Unpin + 'static>: Send + Sized + Unpin + 's
 pub trait ServerTaskEncode {
     fn encode_resp<'a, C: Codec>(
         &'a self, codec: &'a C,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a RpcError>);
+    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>);
 }
 
 /// How to notify Rpc framework when a task is done
@@ -212,11 +212,11 @@ pub trait ServerTaskEncode {
 /// You can skip this as long as you send the result back to RespNoti.
 pub trait ServerTaskDone<T: Send + 'static>: Sized + 'static {
     /// Should implement for enum delegation, not intended for user call
-    fn _set_result(&mut self, res: Result<(), RpcError>) -> RespNoti<T>;
+    fn _set_result(&mut self, res: Result<(), ServerErr>) -> RespNoti<T>;
 
     /// For users, set the result in the task and send it back
     #[inline]
-    fn set_result(mut self, res: Result<(), RpcError>)
+    fn set_result(mut self, res: Result<(), ServerErr>)
     where
         T: std::convert::From<Self>,
     {

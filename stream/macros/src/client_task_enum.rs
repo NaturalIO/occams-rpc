@@ -215,14 +215,14 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 
         impl occams_rpc_stream::client::ClientTaskDone for #enum_name {
             #[inline]
-            fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError> {
+            fn get_result(&self) -> Result<(), &occams_rpc_core::error::ServerErr> {
                 match self {
                     #(#get_result_arms)*
                 }
             }
 
             #[inline]
-            fn set_result(self, res: Result<(), occams_rpc_core::error::RpcError>) {
+            fn set_result(self, res: Result<(), occams_rpc_core::error::ServerErr>) {
                 match self {
                     #(#set_result_arms)*
                 }
@@ -238,7 +238,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 /// ```compile_fail
 /// use occams_rpc_stream_macros::{client_task, client_task_enum};
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::RpcError;
+/// use occams_rpc_core::error::ServerErr;
 /// use crossfire::MTx;
 /// use serde_derive::{Deserialize, Serialize};
 ///
@@ -257,7 +257,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 ///     #[field(resp)]
 ///     resp: Option<MyTaskResp>,
 ///     #[field(res)]
-///     res: Option<Result<(), RpcError>>,
+///     res: Option<Result<(), ServerErr>>,
 ///     #[field(noti)]
 ///     noti: Option<MTx<MyEnumTask>>,
 /// }
