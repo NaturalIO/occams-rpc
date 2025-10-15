@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "codec", "runtime/tokio", "runtime/smol", "stream", "stream/macros", "transport/tcp", "transport/rdma", "transport/quic", "stream/test", ]
+members = ["core", "codec", "macros", "runtime/tokio", "runtime/smol", "stream", "stream/macros", "transport/tcp", "transport/rdma", "transport/quic", "stream/test", ]
 
 [package]
 name = "occams-rpc"
@@ -25,12 +25,14 @@ serde = "1"
 occams-rpc-core = {path="core/", version="0"}
 occams-rpc-codec = {path="codec/", version="0"}
 occams-rpc-stream = {path="stream/", version="0"}
+occams-rpc-api-macros = { path = "macros", version = "0" }
 
 [features]
 default = []
 
 [dev-dependencies]
 serde_derive = "1"
+crossfire = "2.1"
 
 [package.metadata.docs.rs]
 all-features = true
