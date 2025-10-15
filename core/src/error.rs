@@ -20,6 +20,7 @@ pub const RPC_ERR_CLOSED: RpcError = RpcError::Rpc(ERR_CLOSED);
 pub const RPC_ERR_ENCODE: RpcError = RpcError::Rpc(ERR_ENCODE);
 pub const RPC_ERR_DECODE: RpcError = RpcError::Rpc(ERR_DECODE);
 pub const RPC_ERR_INTERNAL: RpcError = RpcError::Rpc(ERR_INTERNAL);
+pub const RPC_ERR_METHOD_NOT_FOUND: RpcError = RpcError::Rpc(ERR_INVALID_METHOD);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RpcError {
