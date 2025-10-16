@@ -146,15 +146,15 @@ impl ReqHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, EncodedErr> {
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
         let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
         if head.magic != RPC_MAGIC {
             warn!("rpc server: wrong magic receive {:?}", head.magic);
-            return Err(RpcIntErr::IO.into());
+            return Err(RpcIntErr::IO);
         }
         if head.ver != 1 {
             warn!("rpc server: version {} not supported", head.ver);
-            return Err(RpcIntErr::Version.into());
+            return Err(RpcIntErr::Version);
         }
         return Ok(head);
     }
@@ -291,15 +291,15 @@ impl RespHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, EncodedErr> {
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
         let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
         if head.magic != RPC_MAGIC {
             warn!("rpc server: wrong magic receive {:?}", head.magic);
-            return Err(RpcIntErr::IO.into());
+            return Err(RpcIntErr::IO);
         }
         if head.ver != 1 {
             warn!("rpc server: version {} not supported", head.ver);
-            return Err(RpcIntErr::Version.into());
+            return Err(RpcIntErr::Version);
         }
         return Ok(head);
     }

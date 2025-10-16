@@ -198,7 +198,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                 logger_trace!(self.logger, "{:?}: send resp: {}", self, header);
             }
             Ok((msg, blob_buf)) => {
-                let header = proto::RespHead::encode_msg(seq, &msg, &blob_buf);
+                let header = proto::RespHead::encode_msg(seq, &msg, blob_buf.as_ref());
                 if let Err(e) =
                     io_with_timeout!(F::IO, write_timeout, writer.write_all(header.as_bytes()))
                 {

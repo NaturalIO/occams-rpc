@@ -343,7 +343,7 @@ impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
 
     #[inline]
     fn encode_resp<C: Codec>(
-        codec: &'a C, mut task: Self::ChannelItem,
+        codec: &C, mut task: Self::ChannelItem,
     ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         task.encode_resp(codec)
     }

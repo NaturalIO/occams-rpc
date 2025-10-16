@@ -207,6 +207,13 @@ impl RpcIntErr {
     }
 }
 
+impl From<std::io::Error> for RpcIntErr {
+    #[inline(always)]
+    fn from(e: std::io::Error) -> Self {
+        Self::IO
+    }
+}
+
 /// A container for error message parse from / send into transport
 #[derive(Debug, thiserror::Error)]
 pub enum EncodedErr {

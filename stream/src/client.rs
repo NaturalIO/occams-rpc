@@ -7,7 +7,7 @@ use crossfire::MAsyncRx;
 pub use occams_rpc_core::ClientConfig;
 use occams_rpc_core::{
     Codec,
-    error::{RpcIntErr, ServerErr},
+    error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr},
     runtime::AsyncIO,
 };
 use std::fmt;
@@ -62,10 +62,10 @@ pub trait ClientFactory: Send + Sync + Sized + 'static {
     fn new_logger(&self, client_id: u64, server_id: u64) -> Self::Logger;
     /// TODO Fix the logger interface
 
-    /// How to deal with ServerErr
+    /// How to deal with error
     ///
     /// You can overwrite this to implement retry logic
-    fn error_handle<E: Into<ServerErr>>(&self, task: Self::Task, err: E) {
+    fn error_handle<E: Into<EncodedErr>>(&self, task: Self::Task, err: E) {
         task.set_result(Err(err.into()));
     }
 
@@ -106,7 +106,7 @@ pub trait ClientTransport<F: ClientFactory>: fmt::Debug + Send + Sized + 'static
     fn read_resp(
         &self, factory: &F, codec: &F::Codec, close_ch: Option<&MAsyncRx<()>>,
         task_reg: &mut ClientTaskTimer<F>,
-    ) -> impl std::future::Future<Output = Result<bool, ServerErr>> + Send;
+    ) -> impl std::future::Future<Output = Result<bool, RpcIntErr>> + Send;
 }
 
 /// Sum up trait for client task, including request and response
@@ -152,11 +152,11 @@ pub trait ClientTaskDecode {
 /// How to notify from Rpc framework to user when a task is done
 pub trait ClientTaskDone: Sized + 'static {
     /// Check the result of the task
-    fn get_result(&self) -> Result<(), &ServerErr>;
+    fn get_result<E: RpcErrCodec>(&self) -> Result<(), &RpcError<E>>;
 
     /// Set the result and notify outside the task is done.
     /// Called by RPC framework
-    fn set_result(self, res: Result<(), ServerErr>);
+    fn set_result(self, res: Result<(), EncodedErr>);
 }
 
 /// Get RpcAction from a enum task, or a sub-type that fits multiple RpcActions
