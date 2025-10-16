@@ -129,6 +129,7 @@ where
                             }
                         }
                         Err(_e) => {
+                            // XXX read_req return error not used
                             return Err(());
                         }
                     }
@@ -136,7 +137,7 @@ where
             }
 
             #[inline]
-            fn send_quick_resp(&self, seq: u64, err: Option<ServerErr>) -> Result<(), ()> {
+            fn send_quick_resp(&self, seq: u64, err: Option<RpcIntErr>) -> Result<(), ()> {
                 if self.noti.send_err(seq, err).is_err() {
                     logger_warn!(
                         self.conn.get_logger(),
@@ -158,7 +159,7 @@ where
 
         struct Writer<F: ServerFactory, D: ReqDispatch<R>, R: RespReceiver> {
             dispatch: Arc<D>,
-            done_rx: crossfire::AsyncRx<Result<R::ChannelItem, (u64, Option<ServerErr>)>>,
+            done_rx: crossfire::AsyncRx<Result<R::ChannelItem, (u64, Option<RpcIntErr>)>>,
             conn: Arc<F::Transport>,
         }
 
@@ -169,14 +170,14 @@ where
                         match $task {
                             Ok(mut _task) => {
                                 logger_trace!(self.conn.get_logger(), "write_resp {:?}", _task);
-                                let (seq, res) = self.dispatch.encode_resp(&mut _task);
+                                let (seq, res) = self.dispatch.encode_resp(_task);
                                 self.conn.write_resp(seq, res).await?;
                             }
                             Err((seq, None)) => {
                                 self.conn.write_resp(seq, Ok((vec![], None))).await?;
                             }
                             Err((seq, Some(err))) => {
-                                self.conn.write_resp(seq, Err(&err)).await?;
+                                self.conn.write_resp(seq, Err(err.into())).await?;
                             }
                         }
                     }};
@@ -327,9 +328,9 @@ where
     }
 
     #[inline]
-    fn encode_resp<'a>(
-        &'a self, task: &'a mut R::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
+    fn encode_resp(
+        &self, mut task: R::ChannelItem,
+    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         R::encode_resp::<C>(&self.codec, task)
     }
 }
@@ -341,9 +342,9 @@ impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
     type ChannelItem = T;
 
     #[inline]
-    fn encode_resp<'a, C: Codec>(
-        codec: &'a C, task: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
+    fn encode_resp<C: Codec>(
+        codec: &'a C, mut task: Self::ChannelItem,
+    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         task.encode_resp(codec)
     }
 }
@@ -354,14 +355,11 @@ impl RespReceiver for RespReceiverBuf {
     type ChannelItem = RpcSvrResp;
 
     #[inline]
-    fn encode_resp<'a, C: Codec>(
-        _codec: &'a C, item: &'a mut Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
-        match &mut item.res {
-            Ok(()) => {
-                let msg = item.msg.take().unwrap();
-                (item.seq, Ok((msg, item.blob.as_ref())))
-            }
+    fn encode_resp<C: Codec>(
+        _codec: &C, mut item: Self::ChannelItem,
+    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
+        match item.res {
+            Ok(()) => (item.seq, Ok((item.msg.take().unwrap(), item.blob))),
             Err(e) => (item.seq, Err(e)),
         }
     }
@@ -371,44 +369,57 @@ impl RespReceiver for RespReceiverBuf {
 /// presuming you have a different types to represent Request and Response.
 /// You can write your customize version.
 #[allow(dead_code)]
-pub struct ServerTaskVariant<T, M>
+pub struct ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     pub seq: u64,
     pub action: RpcActionOwned,
     pub msg: M,
     pub blob: Option<Buffer>,
-    pub res: Option<Result<(), ServerErr>>,
+    pub res: Option<Result<(), E>>,
     pub noti: Option<RespNoti<T>>,
 }
 
-impl<T, M> fmt::Debug for ServerTaskVariant<T, M>
+impl<T, M, E> fmt::Debug for ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: fmt::Debug + Send + Unpin + 'static,
+    E: RpcErrCodec + fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "task seq={} action={:?} {:?}", self.seq, self.action, self.msg)
+        write!(f, "task seq={} action={:?} {:?}", self.seq, self.action, self.msg)?;
+        match self.res.as_ref() {
+            Some(Ok(())) => {
+                write!(f, " ok")
+            }
+            Some(Err(e)) => {
+                write!(f, " err: {}", e)
+            }
+            _ => Ok(()),
+        }
     }
 }
 
-impl<T, M> ServerTaskDone<T> for ServerTaskVariant<T, M>
+impl<T, M, E> ServerTaskDone<T, E> for ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
-    fn _set_result(&mut self, res: Result<(), ServerErr>) -> RespNoti<T> {
+    fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T> {
         self.res.replace(res);
         return self.noti.take().unwrap();
     }
 }
 
-impl<T, M> ServerTaskDecode<T> for ServerTaskVariant<T, M>
+impl<T, M, E> ServerTaskDecode<T> for ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: for<'b> Deserialize<'b> + Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
         codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
@@ -419,37 +430,39 @@ where
     }
 }
 
-impl<T, M> ServerTaskAction for ServerTaskVariant<T, M>
+impl<T, M, E> ServerTaskAction for ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     fn get_action<'a>(&'a self) -> RpcAction<'a> {
         self.action.to_action()
     }
 }
 
-impl<T, M> ServerTaskEncode for ServerTaskVariant<T, M>
+impl<T, M, E> ServerTaskEncode for ServerTaskVariant<T, M, E>
 where
     T: Send + Unpin + 'static,
     M: Serialize + Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
-    fn encode_resp<'a, C: Codec>(
-        &'a self, codec: &'a C,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
+    fn encode_resp<C: Codec>(
+        self, codec: &C,
+    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         if let Some(res) = self.res.as_ref() {
-            match codec.encode(&self.msg) {
-                Err(_) => {
-                    return (self.seq, Err(&RPC_ERR_ENCODE));
-                }
-                Ok(resp) => match res {
-                    Ok(_) => {
-                        return (self.seq, Ok((resp, self.blob.as_ref())));
+            match res {
+                Ok(_) => match codec.encode(&self.msg) {
+                    Err(_) => {
+                        return (self.seq, Err(RpcIntErr::Encode.into()));
                     }
-                    Err(e) => {
-                        return (self.seq, Err(e));
+                    Ok(resp) => {
+                        return (self.seq, Ok((resp, self.blob)));
                     }
                 },
+                Err(e) => {
+                    return (self.seq, Err(e.encode::<C>(codec)));
+                }
             }
         } else {
             panic!("no result when encode_resp");
@@ -461,11 +474,12 @@ where
 /// presuming you have a type to carry both Request and Response.
 /// You can write your customize version.
 #[allow(dead_code)]
-pub struct ServerTaskVariantFull<T, R, P>
+pub struct ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: Send + Unpin + 'static,
     P: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     pub seq: u64,
     pub action: RpcActionOwned,
@@ -473,38 +487,46 @@ where
     pub req_blob: Option<Buffer>,
     pub resp: Option<P>,
     pub resp_blob: Option<Buffer>,
-    pub res: Option<Result<(), ServerErr>>,
+    pub res: Option<Result<(), E>>,
     noti: Option<RespNoti<T>>,
 }
 
-impl<T, R, P> fmt::Debug for ServerTaskVariantFull<T, R, P>
+impl<T, R, P, E> fmt::Debug for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: Send + Unpin + 'static + fmt::Debug,
     P: Send + Unpin + 'static,
+    E: RpcErrCodec + fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "task seq={} action={:?} {:?}", self.seq, self.action, self.req)
+        write!(f, "task seq={} action={:?} {:?}", self.seq, self.action, self.req)?;
+        match self.res.as_ref() {
+            Some(Ok(())) => write!(f, " ok"),
+            Some(Err(e)) => write!(f, " err: {}", e),
+            _ => Ok(()),
+        }
     }
 }
 
-impl<T, R, P> ServerTaskDone<T> for ServerTaskVariantFull<T, R, P>
+impl<T, R, P, E> ServerTaskDone<T, E> for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: Send + Unpin + 'static,
     P: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
-    fn _set_result(&mut self, res: Result<(), ServerErr>) -> RespNoti<T> {
+    fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T> {
         self.res.replace(res);
         return self.noti.take().unwrap();
     }
 }
 
-impl<T, R, P> ServerTaskDecode<T> for ServerTaskVariantFull<T, R, P>
+impl<T, R, P, E> ServerTaskDecode<T> for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: for<'b> Deserialize<'b> + Send + Unpin + 'static,
     P: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
         codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
@@ -524,48 +546,46 @@ where
     }
 }
 
-impl<T, R, P> ServerTaskAction for ServerTaskVariantFull<T, R, P>
+impl<T, R, P, E> ServerTaskAction for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: Send + Unpin + 'static,
     P: Send + Unpin + 'static,
+    E: RpcErrCodec,
 {
     fn get_action<'a>(&'a self) -> RpcAction<'a> {
         self.action.to_action()
     }
 }
 
-impl<T, R, P> ServerTaskEncode for ServerTaskVariantFull<T, R, P>
+impl<T, R, P, E> ServerTaskEncode for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + Unpin + 'static,
     R: Send + Unpin + 'static,
     P: Send + Unpin + 'static + Serialize,
+    E: RpcErrCodec,
 {
-    fn encode_resp<'a, C: Codec>(
-        &'a self, codec: &'a C,
-    ) -> (u64, Result<(Vec<u8>, Option<&'a Buffer>), &'a ServerErr>) {
+    fn encode_resp<C: Codec>(
+        self, codec: &C,
+    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         if let Some(res) = self.res.as_ref() {
-            if let Some(resp) = self.resp.as_ref() {
-                match codec.encode(resp) {
-                    Err(_) => {
-                        return (self.seq, Err(&RPC_ERR_ENCODE));
-                    }
-                    Ok(resp_buf) => match res {
-                        Ok(_) => {
-                            return (self.seq, Ok((resp_buf, self.resp_blob.as_ref())));
-                        }
-                        Err(e) => {
-                            return (self.seq, Err(e));
-                        }
-                    },
+            match res {
+                Err(e) => {
+                    return (self.seq, Err(e.encode::<C>(codec)));
                 }
-            } else {
-                match res {
-                    Ok(_) => {
-                        return (self.seq, Ok((vec![], self.resp_blob.as_ref())));
-                    }
-                    Err(e) => {
-                        return (self.seq, Err(e));
+                Ok(_) => {
+                    if let Some(resp) = self.resp.as_ref() {
+                        match codec.encode(resp) {
+                            Err(_) => {
+                                return (self.seq, Err(RpcIntErr::Encode.into()));
+                            }
+                            Ok(resp_buf) => {
+                                return (self.seq, Ok((resp_buf, self.resp_blob)));
+                            }
+                        }
+                    } else {
+                        // empty response
+                        return (self.seq, Ok((vec![], self.resp_blob)));
                     }
                 }
             }

@@ -301,7 +301,7 @@ impl<F: ClientFactory> ClientTransport<F> for TcpClient<F> {
     async fn read_resp(
         &self, factory: &F, codec: &F::Codec, close_ch: Option<&MAsyncRx<()>>,
         task_reg: &mut ClientTaskTimer<F>,
-    ) -> Result<bool, ServerErr> {
+    ) -> Result<bool, EncodedErr> {
         let mut resp_head_buf = [0u8; proto::RPC_RESP_HEADER_LEN];
         let reader = self.get_stream_mut();
         if let Some(close_ch) = close_ch {

@@ -241,7 +241,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 fn encode_resp<'a, C: occams_rpc_core::Codec>(
                     &'a self,
                     codec: &'a C,
-                ) -> (u64, Result<(Vec<u8>, Option<&'a io_buffer::Buffer>), &'a occams_rpc_core::error::ServerErr>) {
+                ) -> (u64, Result<(Vec<u8>, Option<&'a io_buffer::Buffer>), occams_rpc_core::error::EncodecErr>) {
                     match self {
                         #(#encode_arms)*
                     }
@@ -250,7 +250,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
             impl occams_rpc_stream::server::ServerTaskDone<#enum_name> for #enum_name {
                 #[inline]
-                fn _set_result(&mut self, res: Result<(), occams_rpc_core::error::ServerErr>) -> occams_rpc_stream::server::RespNoti<#enum_name> {
+                fn _set_result(&mut self, res: Result<(), occams_rpc_core::error::EncodedErr>) -> occams_rpc_stream::server::RespNoti<#enum_name> {
                     match self {
                         #(#set_result_arms)*
                     }

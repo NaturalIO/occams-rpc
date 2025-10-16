@@ -146,7 +146,7 @@ impl ReqHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, ServerErr> {
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, EncodedErr> {
         let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
         if head.magic != RPC_MAGIC {
             warn!("rpc server: wrong magic receive {:?}", head.magic);
@@ -238,10 +238,10 @@ pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
 
 impl RespHead {
     #[inline]
-    pub fn encode_err<'a>(seq: u64, err: &'a ServerErr) -> (Self, Option<&'a [u8]>) {
+    pub fn encode_err<'a>(seq: u64, err: &'a EncodedErr) -> (Self, Option<&'a [u8]>) {
         let error_str: &[u8];
         match err {
-            ServerErr::Num(n) => {
+            EncodedErr::Num(n) => {
                 let header = RespHead {
                     magic: RPC_MAGIC,
                     ver: 1,
@@ -252,17 +252,14 @@ impl RespHead {
                 };
                 return (header, None);
             }
-            ServerErr::Text(s) => {
+            EncodedErr::Rpc(s) => {
                 error_str = s.as_bytes();
             }
-            ServerErr::Str(s) => {
-                error_str = s.as_bytes();
-            }
-            ServerErr::Rpc(s) => {
-                error_str = s.as_bytes();
-            }
-            ServerErr::Buf(s) => {
+            EncodedErr::Buf(s) => {
                 error_str = &s;
+            }
+            EncodedErr::Static(s) => {
+                error_str = s.as_bytes();
             }
         }
         let header = RespHead {
@@ -294,7 +291,7 @@ impl RespHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, ServerErr> {
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, EncodedErr> {
         let head: &Self = unsafe { transmute(head_buf.as_ptr()) };
         if head.magic != RPC_MAGIC {
             warn!("rpc server: wrong magic receive {:?}", head.magic);
