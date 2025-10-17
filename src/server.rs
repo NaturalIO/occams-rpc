@@ -40,7 +40,7 @@ impl<C: Codec> Request<C> {
     }
 
     #[inline(always)]
-    pub fn set_int_error(self, e: RpcIntErr) {
+    pub fn set_rpc_error(self, e: RpcIntErr) {
         self.noti.done(Response { seq: self.seq, msg: None, res: Err(e.into()) });
     }
 

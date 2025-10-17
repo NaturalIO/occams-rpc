@@ -1,277 +1,184 @@
 use occams_rpc::server::ServiceTrait;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::Codec;
+use occams_rpc_core::{
+    error::{EncodedErr, RpcIntErr},
+    Codec,
+};
 use occams_rpc_stream::server::RespNoti;
 use std::sync::Arc;
 
 mod common;
-use common::{
-    create_mock_request, MyArg, MyAsyncTraitServiceImpl, MyResp, MyServiceImpl,
-    MyServiceInherentImpl, MyServiceTraitImpl, MyServices,
-};
+use common::*;
 
 #[tokio::test]
-async fn test_service_macro() {
-    let service_impl = MyServiceImpl;
+async fn test_multi_error_service() {
+    let service_impl = MultiErrorServiceImpl;
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();
     let noti = RespNoti::new(tx);
+
+    // Test success case
     let req = create_mock_request(
         1,
-        "MyService".to_string(),
-        "add".to_string(),
+        "MultiErrorService".to_string(),
+        "success_method".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
-
     ServiceTrait::serve(&service_impl, req).await;
-
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
     let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 11);
 
+    // Test string error
     let req = create_mock_request(
         2,
-        "MyService".to_string(),
-        "sub".to_string(),
-        &MyArg { value: 5 },
+        "MultiErrorService".to_string(),
+        "string_error".to_string(),
+        &MyArg { value: 0 },
         noti.clone(),
     );
-
     ServiceTrait::serve(&service_impl, req).await;
-
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 4);
+    assert_eq!(resp.res.unwrap_err(), EncodedErr::Buf("string error".to_string().into_bytes()));
+
+    // Test i32 error
+    let req = create_mock_request(
+        3,
+        "MultiErrorService".to_string(),
+        "i32_error".to_string(),
+        &MyArg { value: 0 },
+        noti.clone(),
+    );
+    ServiceTrait::serve(&service_impl, req).await;
+    let resp = rx.recv().await.unwrap().unwrap();
+    assert_eq!(resp.seq, 3);
+    assert_eq!(resp.res.unwrap_err(), EncodedErr::Num(42));
+
+    // Test errno error
+    let req = create_mock_request(
+        4,
+        "MultiErrorService".to_string(),
+        "errno_error".to_string(),
+        &MyArg { value: 0 },
+        noti.clone(),
+    );
+    ServiceTrait::serve(&service_impl, req).await;
+    let resp = rx.recv().await.unwrap().unwrap();
+    assert_eq!(resp.seq, 4);
+    assert_eq!(resp.res.unwrap_err(), EncodedErr::Num(nix::errno::Errno::EPERM as i32));
 
     // Test unknown method
     let req = create_mock_request(
-        3,
-        "MyService".to_string(),
-        "unknown".to_string(),
-        &MyArg { value: 5 },
+        5,
+        "MultiErrorService".to_string(),
+        "unknown_method".to_string(),
+        &MyArg { value: 0 },
         noti.clone(),
     );
-
     ServiceTrait::serve(&service_impl, req).await;
-
     let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 3);
-    assert!(resp.res.is_err());
-
-    // Test always_error method
-    let req = create_mock_request(
-        4,
-        "MyService".to_string(),
-        "always_error".to_string(),
-        &MyArg { value: 100 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 4);
-    assert!(resp.res.is_err());
-    assert_eq!(
-        resp.res.unwrap_err(),
-        occams_rpc_core::error::RpcError::Text("This method always returns an error".to_string())
-    );
+    assert_eq!(resp.seq, 5);
+    assert_eq!(resp.res.unwrap_err(), EncodedErr::Rpc(RpcIntErr::Method));
 }
 
 #[tokio::test]
-async fn test_service_enum_macro() {
+async fn test_impl_future_service() {
+    let service_impl = ImplFutureServiceImpl;
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();
     let noti = RespNoti::new(tx);
-    let add_service = Arc::new(MyServiceImpl);
-    let sub_service = Arc::new(MyServiceImpl);
-    let services = MyServices::AddService(add_service.clone());
-    // Test 'add' method through enum
+
     let req = create_mock_request(
         1,
-        "MyService".to_string(),
+        "ImplFutureService".to_string(),
         "add".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
+    ServiceTrait::serve(&service_impl, req).await;
+    let resp = rx.recv().await.unwrap().unwrap();
+    assert_eq!(resp.seq, 1);
+    assert!(resp.res.is_ok());
+    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    assert_eq!(decoded_resp.result, 11);
+}
 
+#[tokio::test]
+async fn test_async_trait_service() {
+    let service_impl = MyAsyncTraitServiceImpl;
+    let codec = MsgpCodec::default();
+    let (tx, rx) = crossfire::mpsc::unbounded_async();
+    let noti = RespNoti::new(tx);
+
+    let req = create_mock_request(
+        1,
+        "MyAsyncTraitService".to_string(),
+        "mul".to_string(),
+        &MyArg { value: 10 },
+        noti.clone(),
+    );
+    ServiceTrait::serve(&service_impl, req).await;
+    let resp = rx.recv().await.unwrap().unwrap();
+    assert_eq!(resp.seq, 1);
+    assert!(resp.res.is_ok());
+    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    assert_eq!(decoded_resp.result, 20);
+}
+
+#[tokio::test]
+async fn test_service_mux_struct() {
+    let services = MyServices {
+        multi: Arc::new(MultiErrorServiceImpl),
+        impl_future: Arc::new(ImplFutureServiceImpl),
+    };
+    let codec = MsgpCodec::default();
+    let (tx, rx) = crossfire::mpsc::unbounded_async();
+    let noti = RespNoti::new(tx);
+
+    // Test routing to the 'multi' service
+    let req = create_mock_request(
+        1,
+        "multi".to_string(),
+        "success_method".to_string(),
+        &MyArg { value: 10 },
+        noti.clone(),
+    );
     ServiceTrait::serve(&services, req).await;
-
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
     let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 11);
 
-    // Change the enum variant
-    let services = MyServices::SubService(sub_service.clone());
-
-    // Test 'sub' method through enum
+    // Test routing to the 'impl_future' service
     let req = create_mock_request(
         2,
-        "MyService".to_string(),
-        "sub".to_string(),
-        &MyArg { value: 5 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&services, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 2);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 4);
-}
-
-#[tokio::test]
-async fn test_async_trait_service_macro() {
-    let codec = MsgpCodec::default();
-    let (tx, rx) = crossfire::mpsc::unbounded_async();
-    let noti = RespNoti::new(tx);
-    let service_impl = Arc::new(MyAsyncTraitServiceImpl);
-
-    // Test 'mul' method (async)
-    let req = create_mock_request(
-        1,
-        "MyAsyncTraitService".to_string(),
-        "mul".to_string(),
-        &MyArg { value: 10 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 1);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 20);
-
-    // Test 'div' method (non-async)
-    let req = create_mock_request(
-        2,
-        "MyAsyncTraitService".to_string(),
-        "div".to_string(),
-        &MyArg { value: 10 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 2);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 5);
-}
-
-#[tokio::test]
-async fn test_service_inherent_impl_macro() {
-    let codec = MsgpCodec::default();
-    let (tx, rx) = crossfire::mpsc::unbounded_async();
-    let noti = RespNoti::new(tx);
-    let service_impl = MyServiceInherentImpl;
-
-    // Test 'mul' method (async)
-    let req = create_mock_request(
-        1,
-        "MyServiceInherentImpl".to_string(),
-        "mul".to_string(),
-        &MyArg { value: 10 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 1);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 20);
-
-    // Test 'div' method (non-async)
-    let req = create_mock_request(
-        2,
-        "MyServiceInherentImpl".to_string(),
-        "div".to_string(),
-        &MyArg { value: 10 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 2);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 5);
-}
-
-#[tokio::test]
-async fn test_service_trait_impl_macro() {
-    let codec = MsgpCodec::default();
-    let (tx, rx) = crossfire::mpsc::unbounded_async();
-    let noti = RespNoti::new(tx);
-    let service_impl = MyServiceTraitImpl;
-
-    // Test 'add' method
-    let req = create_mock_request(
-        1,
-        "MyService".to_string(),
+        "impl_future".to_string(),
         "add".to_string(),
-        &MyArg { value: 10 },
+        &MyArg { value: 20 },
         noti.clone(),
     );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
-    let resp = rx.recv().await.unwrap().unwrap();
-    assert_eq!(resp.seq, 1);
-    assert!(resp.res.is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 20); // 10 + 10
-
-    // Test 'sub' method
-    let req = create_mock_request(
-        2,
-        "MyService".to_string(),
-        "sub".to_string(),
-        &MyArg { value: 10 },
-        noti.clone(),
-    );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
+    ServiceTrait::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
     assert!(resp.res.is_ok());
     let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
-    assert_eq!(decoded_resp.result, 0); // 10 - 10
+    assert_eq!(decoded_resp.result, 21);
 
-    // Test always_error method
+    // Test unknown service
     let req = create_mock_request(
         3,
-        "MyService".to_string(),
-        "always_error".to_string(),
-        &MyArg { value: 100 },
+        "unknown_service".to_string(),
+        "add".to_string(),
+        &MyArg { value: 30 },
         noti.clone(),
     );
-
-    ServiceTrait::serve(&service_impl, req).await;
-
+    ServiceTrait::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 3);
-    assert!(resp.res.is_err());
-    assert_eq!(
-        resp.res.unwrap_err(),
-        occams_rpc_core::error::RpcError::Text(
-            "MyServiceTraitImpl always returns an error".to_string()
-        )
-    );
+    assert_eq!(resp.res.unwrap_err(), EncodedErr::Rpc(RpcIntErr::Service));
 }

@@ -21,3 +21,4 @@ rmp-serde = "0.15"
 crossfire = "2.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 async-trait = "0.1"
+nix = "0"

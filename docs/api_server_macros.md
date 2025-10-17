@@ -3,14 +3,13 @@
 ## Requirement
 
 - Provide similar functionality to GRPC
-- All service method should have one arg `A` and one response of `Result<T, RpcError>`. `A` and `T`
-  may be empty struct.
+- All service method should have one arg `A` and one response of `Result<T, E>`, where `E` is a user-defined error type that implements `RpcErrCodec`. `A` and `T` may be empty structs.
 
 ## Trait
 
 There's a `ServiceTrait` which defines a `serve` function, which accept request
 
-```
+```rust
 struct Request<C: Codec> {
     seq: u64,
     service: String,
@@ -24,7 +23,7 @@ struct Request<C: Codec> {
 The `ServiceTrait::serve(req)` should:
     - decode the request from bytes to request struct
     - call the method in itself, to get a response
-    - set_result or set_error to the Request, and encode a Response contains message bytes or RpcError
+    - set_result or set_error to the Request, and encode a Response contains message bytes or an error
     - send the Response through RespNoti
 
 ## macros
@@ -35,9 +34,10 @@ The `#[service]` macro is applied to an `impl` block to automatically generate t
 
 -   When applied to an inherent `impl` block, methods intended as service methods should be marked with `#[method]`.
 -   When applied to a trait `impl` block, all methods defined in the trait will be registered as service methods (no `#[method]` marker needed).
+-   The macro can handle methods with different user-defined error types (e.g. `String`, `i32`, `nix::errno::Errno`) in the same `impl` block.
 
 The service method recognizes:
-- `fn` (which consider non-block)
+- `fn` (which is considered non-blocking)
 - `async fn`
 - `impl Future`
 - trait methods wrapped by `async_trait`
@@ -48,7 +48,6 @@ The macro will iterate all methods and generate a `ServiceTrait::serve()` implem
 
 ```rust
 use occams_rpc_api_macros::{method, service};
-use occams_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -67,12 +66,15 @@ pub struct MyServiceInherentImpl;
 #[service]
 impl MyServiceInherentImpl {
     #[method]
-    async fn mul(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+    async fn mul(&self, arg: MyArg) -> Result<MyResp, String> {
         Ok(MyResp { result: arg.value * 2 })
     }
 
     #[method]
-    fn div(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+    fn div(&self, arg: MyArg) -> Result<MyResp, i32> {
+        if arg.value == 0 {
+            return Err(1); // Return an i32 error
+        }
         Ok(MyResp { result: arg.value / 2 })
     }
 }
@@ -82,15 +84,14 @@ impl MyServiceInherentImpl {
 
 ```rust
 use occams_rpc_api_macros::service;
-use occams_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
 // Assuming MyArg and MyResp are defined as above
 
 pub trait MyService {
-    fn add(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError>> + Send;
-    fn sub(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError>> + Send;
+    fn add(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, String>> + Send;
+    fn sub(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, String>> + Send;
 }
 
 #[derive(Clone)]
@@ -98,53 +99,72 @@ pub struct MyServiceTraitImpl;
 
 #[service]
 impl MyService for MyServiceTraitImpl {
-    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+    async fn add(&self, arg: MyArg) -> Result<MyResp, String> {
         Ok(MyResp { result: arg.value + 10 })
     }
 
-    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, String> {
         Ok(MyResp { result: arg.value - 10 })
     }
 }
 ```
 
-### service multiplexer `#[service_enum]`
+### Service Dispatcher `#[service_mux_struct]`
 
-The `#[service_enum]` macro is applied to an enum to implement `ServiceTrait` on it, which dispatches `serve()` calls to its variants. Each variant must be a newtype variant holding a service that implements `ServiceTrait`.
+The `#[service_mux_struct]` macro is applied to a **struct** to implement `ServiceTrait` on it. It acts as a dispatcher, routing `serve()` calls to the correct service based on the `req.service` field.
 
-#### Example: Service Enum
+Each field in the struct must hold a service that implements `ServiceTrait` (e.g., wrapped in an `Arc`). The macro generates a `serve` implementation that matches `req.service` against the field names of the struct.
+
+#### Example: Service Dispatcher Struct
 
 ```rust
-use occams_rpc_api_macros::{service, service_enum};
-use occams_rpc_core::error::RpcError;
+use occams_rpc_api_macros::{service, service_mux_struct, method};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-// Assuming MyArg and MyResp are defined as above
+// Define some request/response types
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MyArg { pub value: u32, }
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MyResp { pub result: u32, }
 
-#[derive(Clone)]
-pub struct MyServiceImpl;
-
-pub trait MyService {
-    fn add(&self, arg: MyArg) -> impl std::future::Future<Output = Result<MyResp, RpcError>> + Send;
-    fn sub(&self, arg: MyArg) -> impl std::future::Future<Output = Result<MyResp, RpcError>> + Send;
-}
-
+// Define a service
+pub struct MyFirstService;
 #[service]
-impl MyService for MyServiceImpl {
-    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+impl MyFirstService {
+    #[method]
+    async fn add(&self, arg: MyArg) -> Result<MyResp, String> {
         Ok(MyResp { result: arg.value + 1 })
     }
+}
 
-    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError> {
+// Define another service
+pub struct MySecondService;
+#[service]
+impl MySecondService {
+    #[method]
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, String> {
         Ok(MyResp { result: arg.value - 1 })
     }
 }
 
-#[service_enum]
-pub enum MyServices {
-    AddService(Arc<MyServiceImpl>),
-    SubService(Arc<MyServiceImpl>),
+// Use the dispatcher to combine them
+#[service_mux_struct]
+pub struct MyServiceDispatcher {
+    my_first: Arc<MyFirstService>,
+    my_second: Arc<MySecondService>,
 }
+
+// The generated `serve` will look something like this:
+//
+// impl<C: Codec> ServiceTrait<C> for MyServiceDispatcher {
+//     fn serve(&self, req: Request<C>) -> ... {
+//         match req.service.as_str() {
+//             "my_first" => self.my_first.serve(req).await,
+//             "my_second" => self.my_second.serve(req).await,
+//             _ => req.set_rpc_error(RpcIntErr::Service),
+//         }
+//     }
+// }
 ```
 
