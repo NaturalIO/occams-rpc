@@ -2,6 +2,7 @@
 #[test]
 #[allow(dead_code)]
 fn test_server_task_enum_define() {
+    use nix::errno::Errno;
     use occams_rpc_stream::server_impl::ServerTaskVariantFull;
     use occams_rpc_stream_macros::server_task_enum;
     use serde_derive::{Deserialize, Serialize};
@@ -25,12 +26,12 @@ fn test_server_task_enum_define() {
         Read = 2,
     }
 
-    #[server_task_enum(req, resp)]
+    #[server_task_enum(req, resp, error=Errno)]
     #[derive(Debug)]
     pub enum FileServerTask {
         #[action(1)]
-        Open(ServerTaskVariantFull<FileServerTask, FileOpenReq, ()>),
+        Open(ServerTaskVariantFull<FileServerTask, FileOpenReq, (), Errno>),
         #[action(2)]
-        Read(ServerTaskVariantFull<FileServerTask, FileReadReq, ()>),
+        Read(ServerTaskVariantFull<FileServerTask, FileReadReq, (), Errno>),
     }
 }

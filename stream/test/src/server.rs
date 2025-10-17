@@ -7,6 +7,7 @@ use std::sync::Arc;
 use occams_rpc_stream::macros::*;
 
 use captains_log::filter::LogFilter;
+use nix::errno::Errno;
 
 pub fn init_server<H, FH>(
     server_handle: H, config: ServerConfig, addr: &str,
@@ -81,7 +82,7 @@ where
     }
 }
 
-#[server_task_enum(req, resp)]
+#[server_task_enum(req, resp, error = Errno)]
 #[derive(Debug)]
 pub enum FileServerTask {
     #[action(FileAction::Open)]
@@ -90,5 +91,5 @@ pub enum FileServerTask {
     IO(ServerTaskIO),
 }
 
-pub type ServerTaskOpen = ServerTaskVariantFull<FileServerTask, FileOpenReq, ()>;
-pub type ServerTaskIO = ServerTaskVariantFull<FileServerTask, FileIOReq, FileIOResp>;
+pub type ServerTaskOpen = ServerTaskVariantFull<FileServerTask, FileOpenReq, (), Errno>;
+pub type ServerTaskIO = ServerTaskVariantFull<FileServerTask, FileIOReq, FileIOResp, Errno>;

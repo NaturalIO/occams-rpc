@@ -2,8 +2,9 @@ use crate::client::*;
 use crate::server::*;
 use crate::*;
 use crossfire::mpsc;
-use occams_rpc_stream::client::{ClientConfig, ClientTaskDone};
-use occams_rpc_stream::error::{RpcIntErr, ServerErr};
+use occams_rpc_core::error::RpcError;
+use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskGetResult};
+use occams_rpc_stream::error::RpcIntErr;
 use occams_rpc_stream::server::{ServerConfig, ServerTaskDone};
 use std::time::Duration;
 
@@ -58,7 +59,7 @@ fn test_client_task_timeout(runner: TestRunner, #[case] is_tcp: bool) {
 
         let result = completed_open_task.get_result();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), &ServerErr::Rpc(RpcIntErr::Timeout));
+        assert_eq!(result.unwrap_err(), &RpcError::Rpc(RpcIntErr::Timeout));
         log::info!("Open task timed out as expected.");
     });
 }

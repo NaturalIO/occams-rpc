@@ -30,9 +30,26 @@ fn get_action_attribute(variant: &Variant) -> Option<Meta> {
     None
 }
 
-pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let mut error_ty: Option<syn::Type> = None;
+    let parser = |input: syn::parse::ParseStream| {
+        let lookahead = input.lookahead1();
+        if lookahead.peek(syn::Ident) {
+            let ident: syn::Ident = input.parse()?;
+            if ident == "error" {
+                input.parse::<syn::Token![=]>()?;
+                error_ty = Some(input.parse()?);
+            }
+        }
+        Ok(())
+    };
+    parse_macro_input!(attr with parser);
+    let error_type = error_ty.expect("#[client_task_enum] requires an `error = <Type>` attribute");
+
     let mut ast = parse_macro_input!(input as DeriveInput);
+
     let enum_name = &ast.ident;
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
     let variants = if let Data::Enum(data) = &mut ast.data {
         &mut data.variants
@@ -46,38 +63,34 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
     let mut decode_resp_arms = Vec::new();
     let mut reserve_resp_blob_arms = Vec::new();
     let mut get_action_arms = Vec::new();
-    let mut set_result_arms = Vec::new();
     let mut get_result_arms = Vec::new();
+    let mut set_custom_error_arms = Vec::new();
+    let mut set_rpc_error_arms = Vec::new();
+    let mut set_ok_arms = Vec::new();
+    let mut done_arms = Vec::new();
     let mut deref_arms = Vec::new();
     let mut deref_mut_arms = Vec::new();
 
     let mut inner_type_counts: HashMap<String, usize> = HashMap::new();
-    for variant in variants.iter() {
-        if let Fields::Unnamed(fields) = &variant.fields {
-            if fields.unnamed.len() == 1 {
-                let inner_type = &fields.unnamed.first().unwrap().ty;
-                let inner_type_str = quote! {#inner_type}.to_string();
-                *inner_type_counts.entry(inner_type_str).or_insert(0) += 1;
-            }
-        }
-    }
 
     for variant in variants.iter_mut() {
         let variant_name = &variant.ident;
-        let inner_type = match &variant.fields {
+        let inner_type_cloned = match &variant.fields {
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
-                &fields.unnamed.first().unwrap().ty
+                fields.unnamed.first().unwrap().ty.clone()
             }
             _ => panic!("Enum variants must be tuple-style with a single field"),
         };
 
-        let inner_type_str = quote! {#inner_type}.to_string();
+        let inner_type_str = quote! {#inner_type_cloned}.to_string();
+        *inner_type_counts.entry(inner_type_str.clone()).or_insert(0) += 1;
+
         let count = *inner_type_counts.get(&inner_type_str).unwrap_or(&0);
         if count == 1 {
             from_impls.push(quote! {
-                impl From<#inner_type> for #enum_name {
+                impl #impl_generics From<#inner_type_cloned> for #enum_name #ty_generics #where_clause {
                     #[inline]
-                    fn from(task: #inner_type) -> Self {
+                    fn from(task: #inner_type_cloned) -> Self {
                         #enum_name::#variant_name(task)
                     }
                 }
@@ -131,12 +144,20 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDecode::reserve_resp_blob(inner, size),
         });
 
-        set_result_arms.push(quote! {
-            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::set_result(inner, res),
-        });
-
         get_result_arms.push(quote! {
-            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::get_result(inner),
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskGetResult::get_result(inner),
+        });
+        set_custom_error_arms.push(quote! {
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::set_custom_error(inner, codec, res),
+        });
+        set_rpc_error_arms.push(quote! {
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::set_rpc_error(inner, e),
+        });
+        set_ok_arms.push(quote! {
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::set_ok(inner),
+        });
+        done_arms.push(quote! {
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskDone::done(inner),
         });
 
         deref_arms.push(quote! {
@@ -153,7 +174,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 
         #(#from_impls)*
 
-        impl std::ops::Deref for #enum_name {
+        impl #impl_generics std::ops::Deref for #enum_name #ty_generics #where_clause {
             type Target = occams_rpc_stream::client::ClientTaskCommon;
             #[inline]
             fn deref(&self) -> &Self::Target {
@@ -163,7 +184,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             }
         }
 
-        impl std::ops::DerefMut for #enum_name {
+        impl #impl_generics std::ops::DerefMut for #enum_name #ty_generics #where_clause {
             #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
                 match self {
@@ -172,7 +193,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             }
         }
 
-        impl occams_rpc_stream::client::ClientTaskEncode for #enum_name {
+        impl #impl_generics occams_rpc_stream::client::ClientTaskEncode for #enum_name #ty_generics #where_clause {
             #[inline]
             fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()> {
                 match self {
@@ -188,7 +209,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             }
         }
 
-        impl occams_rpc_stream::client::ClientTaskDecode for #enum_name {
+        impl #impl_generics occams_rpc_stream::client::ClientTaskDecode for #enum_name #ty_generics #where_clause {
             #[inline]
             fn decode_resp<C: occams_rpc_core::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
                 match self {
@@ -204,7 +225,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             }
         }
 
-        impl occams_rpc_stream::client::ClientTaskAction for #enum_name {
+        impl #impl_generics occams_rpc_stream::client::ClientTaskAction for #enum_name #ty_generics #where_clause {
             #[inline]
             fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
                 match self {
@@ -213,23 +234,46 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
             }
         }
 
-        impl occams_rpc_stream::client::ClientTaskDone for #enum_name {
+        impl #impl_generics occams_rpc_stream::client::ClientTaskGetResult<#error_type> for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn get_result(&self) -> Result<(), &occams_rpc_core::error::ServerErr> {
+            fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError<#error_type>> {
                 match self {
                     #(#get_result_arms)*
                 }
             }
+        }
+
+        impl #impl_generics occams_rpc_stream::client::ClientTaskDone for #enum_name #ty_generics #where_clause {
+            #[inline]
+            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) {
+                match self {
+                    #(#set_custom_error_arms)*
+                }
+            }
 
             #[inline]
-            fn set_result(self, res: Result<(), occams_rpc_core::error::ServerErr>) {
+            fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) {
                 match self {
-                    #(#set_result_arms)*
+                    #(#set_rpc_error_arms)*
+                }
+            }
+
+            #[inline]
+            fn set_ok(&mut self) {
+                match self {
+                    #(#set_ok_arms)*
+                }
+            }
+
+            #[inline]
+            fn done(self) {
+                match self {
+                    #(#done_arms)*
                 }
             }
         }
 
-        impl occams_rpc_stream::client::ClientTask for #enum_name {}
+        impl #impl_generics occams_rpc_stream::client::ClientTask for #enum_name #ty_generics #where_clause {}
     };
 
     TokenStream::from(expanded)
@@ -238,9 +282,10 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 /// ```compile_fail
 /// use occams_rpc_stream_macros::{client_task, client_task_enum};
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::ServerErr;
+/// use occams_rpc_core::error::{RpcErrCodec, RpcError};
 /// use crossfire::MTx;
 /// use serde_derive::{Deserialize, Serialize};
+/// use std::marker::PhantomData;
 ///
 /// #[derive(Default, Deserialize, Serialize)]
 /// pub struct MyTaskReq;
@@ -249,7 +294,7 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 /// pub struct MyTaskResp;
 ///
 /// #[client_task]
-/// pub struct TaskA {
+/// pub struct TaskA<E: RpcErrCodec> {
 ///     #[field(common)]
 ///     common: ClientTaskCommon,
 ///     #[field(req)]
@@ -257,15 +302,17 @@ pub fn client_task_enum_impl(_attr: TokenStream, input: TokenStream) -> TokenStr
 ///     #[field(resp)]
 ///     resp: Option<MyTaskResp>,
 ///     #[field(res)]
-///     res: Option<Result<(), ServerErr>>,
+///     res: Option<Result<(), RpcError<E>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<MyEnumTask>>,
+///     noti: Option<MTx<MyEnumTask<E>>>,
+///     #[serde(skip)]
+///     _e: PhantomData<E>,
 /// }
 ///
 /// #[client_task_enum]
-/// pub enum MyEnumTask {
-///     VariantA(TaskA),
-///     VariantB(TaskA), // Duplicate sub-type TaskA
+/// pub enum MyEnumTask<E: RpcErrCodec> {
+///     VariantA(TaskA<E>),
+///     VariantB(TaskA<E>), // Duplicate sub-type TaskA
 /// }
 /// ```
 #[doc(hidden)]

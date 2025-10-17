@@ -2,7 +2,7 @@ use crate::client::*;
 use crate::server::*;
 use crate::*;
 use crossfire::mpsc;
-use occams_rpc_stream::client::{ClientConfig, ClientTaskDone};
+use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskGetResult};
 use occams_rpc_stream::server::{ServerConfig, ServerTaskDone};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

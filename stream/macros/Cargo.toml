@@ -24,6 +24,7 @@ quote = "1.0"
 proc-macro2 = "1.0"
 
 [dev-dependencies]
+nix = "0"
 occams-rpc-stream = { path="../", version="0" }
 occams-rpc-core = { path="../../core", version="0" }
 occams-rpc-codec = { path="../../codec", version="0", features=["msgpack"] }

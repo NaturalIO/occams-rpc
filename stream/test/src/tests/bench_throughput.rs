@@ -3,8 +3,11 @@ use crate::server::*;
 use crate::*;
 use crossfire::mpsc;
 use io_buffer::{Buffer, rand_buffer};
+use nix::errno::Errno;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskEncode};
+use occams_rpc_stream::client::{
+    ClientConfig, ClientTaskDone, ClientTaskEncode, ClientTaskGetResult,
+};
 use occams_rpc_stream::proto::{RPC_REQ_HEADER_LEN, RpcAction};
 use occams_rpc_stream::server::{ServerConfig, ServerTaskAction, ServerTaskDone};
 use std::convert::TryFrom;
@@ -36,7 +39,7 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
                             io_task.resp = Some(FileIOResp { ret_size });
                             io_task.set_result(Ok(()));
                         } else {
-                            io_task.set_result(Err("No data to write".into()));
+                            io_task.set_result(Err(Errno::EINVAL));
                         }
                         Ok(())
                     }
@@ -73,11 +76,12 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
         rand_buffer(&mut write_data);
 
         let write_task = FileClientTaskWrite::new(tx.clone(), 1, 0, write_data.clone());
-        let task: FileClientTask = write_task.into();
+        let mut task: FileClientTask = write_task.into();
         let codec = MsgpCodec::default();
         let req_buf = task.encode_req(&codec).expect("encode");
         let req_size = req_buf.len() + RPC_REQ_HEADER_LEN + data_len as usize;
-        task.set_result(Ok(()));
+        task.set_ok();
+        task.done();
         let _ = rx.recv().await; // consume one channel tx ref
         println!("req_size: {}", req_size);
 

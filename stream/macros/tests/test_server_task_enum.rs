@@ -1,5 +1,6 @@
+use nix::errno::Errno;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::{Codec, error::ServerErr};
+use occams_rpc_core::{Codec, error::RpcErrCodec};
 use occams_rpc_stream::{
     proto::{RpcAction, RpcActionOwned},
     server::{
@@ -40,13 +41,13 @@ impl<R: Send + Unpin + 'static> ServerTaskDecode<R> for StaticActionTask {
 
 #[test]
 fn test_server_task_enum_req_macro() {
-    #[server_task_enum(req, resp_type=RpcSvrResp)]
+    #[server_task_enum(req, resp_type=RpcSvrResp, error = Errno)]
     #[derive(Debug)]
     pub enum ExampleServerTaskReq {
         #[action(1)]
-        Task1(ServerTaskVariant<RpcSvrResp, ReqMsg1>),
+        Task1(ServerTaskVariant<RpcSvrResp, ReqMsg1, Errno>),
         #[action("sub_task_2")]
-        Task2(ServerTaskVariant<RpcSvrResp, ReqMsg2>),
+        Task2(ServerTaskVariant<RpcSvrResp, ReqMsg2, Errno>),
         #[action("static_action")] // New variant for static action
         Task3(StaticActionTask),
     }
@@ -129,11 +130,11 @@ fn test_server_task_enum_req_macro() {
 
 #[test]
 fn test_server_task_enum_resp_macro() {
-    #[server_task_enum(resp)]
+    #[server_task_enum(resp, error = Errno)]
     #[derive(Debug)]
     pub enum ExampleServerTaskResp {
-        Task1(ServerTaskVariant<ExampleServerTaskResp, Msg1>),
-        Task2(ServerTaskVariant<ExampleServerTaskResp, Msg2>),
+        Task1(ServerTaskVariant<ExampleServerTaskResp, Msg1, Errno>),
+        Task2(ServerTaskVariant<ExampleServerTaskResp, Msg2, Errno>),
     }
     let codec = MsgpCodec::default();
     let (tx, _rx) = crossfire::mpsc::unbounded_async();
@@ -141,53 +142,54 @@ fn test_server_task_enum_resp_macro() {
 
     // Create ServerTaskVariant instances using decode_req
     let msg1_buf = codec.encode(&Msg1::default()).unwrap();
-    let variant1: ServerTaskVariant<ExampleServerTaskResp, Msg1> =
-        <ServerTaskVariant<ExampleServerTaskResp, Msg1> as ServerTaskDecode<
+    let variant1: ServerTaskVariant<ExampleServerTaskResp, Msg1, Errno> =
+        <ServerTaskVariant<ExampleServerTaskResp, Msg1, Errno> as ServerTaskDecode<
             ExampleServerTaskResp,
         >>::decode_req(&codec, RpcAction::Num(1), 123, &msg1_buf, None, noti.clone())
         .unwrap();
 
     let msg2_buf = codec.encode(&Msg2::default()).unwrap();
-    let variant2: ServerTaskVariant<ExampleServerTaskResp, Msg2> =
-        <ServerTaskVariant<ExampleServerTaskResp, Msg2> as ServerTaskDecode<
+    let variant2: ServerTaskVariant<ExampleServerTaskResp, Msg2, Errno> =
+        <ServerTaskVariant<ExampleServerTaskResp, Msg2, Errno> as ServerTaskDecode<
             ExampleServerTaskResp,
         >>::decode_req(&codec, RpcAction::Num(2), 456, &msg2_buf, None, noti.clone())
         .unwrap();
 
     let mut task1_for_encode = ExampleServerTaskResp::Task1(variant1);
-    <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp>>::_set_result(
+    <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp, Errno>>::_set_result(
         &mut task1_for_encode,
-        Err(ServerErr::Text("some error".to_string())),
+        Err(Errno::EPERM.into()),
     );
     let (seq1, resp1) =
-        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(&task1_for_encode, &codec);
+        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(task1_for_encode, &codec);
     assert_eq!(seq1, 123);
-    assert_eq!(resp1.unwrap_err(), &ServerErr::Text("some error".to_string()));
+    assert_eq!(resp1.unwrap_err(), Errno::EPERM.encode(&codec));
 
     let mut task2_for_encode = ExampleServerTaskResp::Task2(variant2);
-    <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp>>::_set_result(
+    <ExampleServerTaskResp as ServerTaskDone<ExampleServerTaskResp, Errno>>::_set_result(
         &mut task2_for_encode,
         Ok(()),
     );
     let (seq2, resp2) =
-        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(&task2_for_encode, &codec);
+        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(task2_for_encode, &codec);
     assert_eq!(seq2, 456);
     assert!(resp2.is_ok());
 
     let mut task_for_set_result = ExampleServerTaskResp::Task1(
-        <ServerTaskVariant<ExampleServerTaskResp, Msg1> as ServerTaskDecode<
+        <ServerTaskVariant<ExampleServerTaskResp, Msg1, Errno> as ServerTaskDecode<
             ExampleServerTaskResp,
         >>::decode_req(&codec, RpcAction::Num(1), 789, &msg1_buf, None, noti.clone())
         .unwrap(),
     );
     let _: RespNoti<ExampleServerTaskResp> = <ExampleServerTaskResp as ServerTaskDone<
         ExampleServerTaskResp,
+        Errno,
     >>::_set_result(&mut task_for_set_result, Ok(()));
 
     // Test set_result
     #[allow(unused_mut)]
     let mut task_for_set_result_done = ExampleServerTaskResp::Task2(
-        <ServerTaskVariant<ExampleServerTaskResp, Msg2> as ServerTaskDecode<
+        <ServerTaskVariant<ExampleServerTaskResp, Msg2, Errno> as ServerTaskDecode<
             ExampleServerTaskResp,
         >>::decode_req(&codec, RpcAction::Num(2), 101, &msg2_buf, None, noti.clone())
         .unwrap(),
@@ -197,11 +199,11 @@ fn test_server_task_enum_resp_macro() {
 
 #[test]
 fn test_server_task_enum_multiple_actions() {
-    #[server_task_enum(req, resp_type=RpcSvrResp)]
+    #[server_task_enum(req, resp_type=RpcSvrResp, error = Errno)]
     #[derive(Debug)]
     pub enum MultiActionServerTask {
         #[action(1, 2, "action_str")]
-        TaskA(ServerTaskVariant<RpcSvrResp, ReqMsg1>),
+        TaskA(ServerTaskVariant<RpcSvrResp, ReqMsg1, Errno>),
     }
 
     let codec = MsgpCodec::default();

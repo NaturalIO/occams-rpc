@@ -1,16 +1,19 @@
 use crossfire::{MTx, mpsc};
+use nix::errno::Errno;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::*;
+use occams_rpc_core::error::{RpcErrCodec, RpcError, RpcIntErr};
 use occams_rpc_stream::{
     client::{
         ClientTaskAction, ClientTaskCommon, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
+        ClientTaskGetResult,
     },
     proto::RpcAction,
 };
 use occams_rpc_stream_macros::{client_task, client_task_enum};
+use std::marker::PhantomData;
 
 #[client_task(1, debug)]
-struct TaskA {
+struct TaskA<E: RpcErrCodec> {
     #[field(common)]
     common: ClientTaskCommon,
     #[field(req)]
@@ -18,13 +21,13 @@ struct TaskA {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
 }
 
 #[client_task("task_b", debug)]
-struct TaskB {
+struct TaskB<E: RpcErrCodec> {
     #[field(common)]
     common: ClientTaskCommon,
     #[field(req)]
@@ -32,13 +35,14 @@ struct TaskB {
     #[field(resp)]
     resp: Option<u32>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
+    _phantom: PhantomData<E>,
 }
 
 #[client_task(3, debug)]
-struct TaskC {
+struct TaskC<E: RpcErrCodec> {
     #[field(common)]
     common: ClientTaskCommon,
     #[field(req)]
@@ -50,23 +54,24 @@ struct TaskC {
     #[field(resp_blob)]
     resp_blob: Option<Vec<u8>>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
     noti: Option<MTx<MyTask>>,
+    _phantom: PhantomData<E>,
 }
 
-#[client_task_enum]
+#[client_task_enum(error = Errno)]
 #[derive(Debug)]
 enum MyTask {
-    A(TaskA),
-    B(TaskB),
-    C(TaskC),
+    A(TaskA<Errno>),
+    B(TaskB<Errno>),
+    C(TaskC<Errno>),
 }
 
 #[test]
 fn test_client_task_enum_delegation() {
     let (tx, rx) = mpsc::unbounded_blocking();
-    let task_a = TaskA {
+    let task_a = TaskA::<Errno> {
         common: ClientTaskCommon::default(),
         req: "hello".to_string(),
         resp: None,
@@ -74,15 +79,16 @@ fn test_client_task_enum_delegation() {
         noti: Some(tx.clone()),
     };
 
-    let task_b = TaskB {
+    let task_b = TaskB::<Errno> {
         common: ClientTaskCommon::default(),
         req: 123,
         resp: None,
         res: None,
         noti: Some(tx.clone()),
+        _phantom: PhantomData,
     };
 
-    let task_c = TaskC {
+    let task_c = TaskC::<Errno> {
         common: ClientTaskCommon::default(),
         req: (),
         resp: None,
@@ -90,6 +96,7 @@ fn test_client_task_enum_delegation() {
         resp_blob: Some(vec![]),
         res: None,
         noti: Some(tx.clone()),
+        _phantom: PhantomData,
     };
 
     // Test From impls
@@ -107,8 +114,9 @@ fn test_client_task_enum_delegation() {
     assert_eq!(enum_task_c.get_action(), RpcAction::Num(3));
 
     // Test ClientTask delegation
-    assert_eq!(enum_task_a.get_result(), Err(&RPC_ERR_INTERNAL));
-    enum_task_a.set_result(Ok(()));
+    assert_eq!(enum_task_a.get_result(), Err(&RpcIntErr::Internal.into()));
+    enum_task_a.set_ok();
+    enum_task_a.done();
     let received = rx.recv().unwrap();
     assert!(matches!(received, MyTask::A(_)));
     assert_eq!(received.get_result(), Ok(()));
@@ -141,7 +149,7 @@ struct TaskActionOverwrite {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }
@@ -155,7 +163,7 @@ struct TaskActionDelegate {
     #[field(resp)]
     resp: Option<String>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }
@@ -169,12 +177,12 @@ struct TaskBWithAction {
     #[field(resp)]
     resp: Option<u32>,
     #[field(res)]
-    res: Option<Result<(), ServerErr>>,
+    res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
     noti: Option<MTx<MyTaskWithAction>>,
 }
 
-#[client_task_enum]
+#[client_task_enum(error = Errno)]
 #[derive(Debug)]
 enum MyTaskWithAction {
     #[action(100)]

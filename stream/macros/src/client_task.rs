@@ -24,6 +24,14 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as AttributeArgs);
     let mut ast = parse_macro_input!(input as DeriveInput);
     let struct_name = &ast.ident;
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let has_generics = !ast.generics.params.is_empty();
+
+    let (impl_generics_for_impl, ty_generics_for_impl, where_clause_for_impl) = if has_generics {
+        (quote! { #impl_generics }, quote! { #ty_generics }, quote! { #where_clause })
+    } else {
+        (quote! {}, quote! {}, quote! {})
+    };
     let mut common_field: Option<(Ident, Type)> = None;
     let mut req_field: Option<Ident> = None;
     let mut resp_field: Option<(Ident, Type)> = None;
@@ -151,7 +159,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         quote! {
-            impl occams_rpc_stream::client::ClientTaskAction for #struct_name {
+            impl #impl_generics_for_impl occams_rpc_stream::client::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 #[inline]
                 fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
                     #action_conversion
@@ -177,7 +185,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
             ),
         };
         quote! {
-            impl occams_rpc_stream::client::ClientTaskAction for #struct_name {
+            impl #impl_generics_for_impl occams_rpc_stream::client::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 #[inline]
                 fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
                     #action_token_stream
@@ -188,25 +196,197 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    let client_task_done_impl = if let (Some((res_field_name, _)), Some((noti_field_name, _))) =
-        (&res_field, &noti_field)
+    let client_task_done_impl = if let (
+        Some((res_field_name, res_field_type)),
+        Some((noti_field_name, noti_full_type)),
+    ) = (&res_field, &noti_field)
     {
-        quote! {
-            impl occams_rpc_stream::client::ClientTaskDone for #struct_name {
-                #[inline]
-                fn get_result(&self) -> Result<(), &occams_rpc_core::error::ServerErr> {
-                    match self.#res_field_name.as_ref() {
-                        Some(Ok(()))=>return Ok(()),
-                        Some(Err(e))=>return Err(e),
-                        None=>Err(&occams_rpc_core::error::RPC_ERR_INTERNAL)
+        let error_type = {
+            let res_type_path = if let syn::Type::Path(p) = res_field_type {
+                p
+            } else {
+                panic!("res field must be a path type")
+            };
+            let last_segment =
+                res_type_path.path.segments.last().expect("res field type path must have segments");
+            if last_segment.ident != "Option" {
+                panic!("res field must be an Option")
+            };
+
+            let option_inner_type =
+                if let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments {
+                    if let Some(syn::GenericArgument::Type(ty)) = args.args.first() {
+                        ty
+                    } else {
+                        panic!("Option needs a type argument")
                     }
+                } else {
+                    panic!("Option needs angle bracketed arguments")
+                };
+
+            let result_type_path = if let syn::Type::Path(p) = option_inner_type {
+                p
+            } else {
+                panic!("res field's inner type must be a Result")
+            };
+            let last_segment =
+                result_type_path.path.segments.last().expect("Result type path must have segments");
+            if last_segment.ident != "Result" {
+                panic!("res field must be an Option<Result<...>>")
+            };
+
+            let result_args =
+                if let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments {
+                    &args.args
+                } else {
+                    panic!("Result needs angle bracketed arguments")
+                };
+            if result_args.len() != 2 {
+                panic!("Result needs two type arguments")
+            };
+
+            if let syn::GenericArgument::Type(syn::Type::Tuple(ok_ty)) = &result_args[0] {
+                if !ok_ty.elems.is_empty() {
+                    panic!("Result's Ok type must be ()")
+                };
+            } else {
+                panic!("Result's Ok type must be ()")
+            };
+
+            let rpc_error_type = if let syn::GenericArgument::Type(ty) = &result_args[1] {
+                ty
+            } else {
+                panic!("Could not get error type from Result")
+            };
+            let rpc_error_path = if let syn::Type::Path(p) = rpc_error_type {
+                p
+            } else {
+                panic!("Result's error type must be RpcError")
+            };
+            let last_segment =
+                rpc_error_path.path.segments.last().expect("RpcError type path must have segments");
+            if last_segment.ident != "RpcError" {
+                panic!("Result's error type must be RpcError")
+            };
+
+            if let syn::PathArguments::AngleBracketed(args) = &last_segment.arguments {
+                if let Some(syn::GenericArgument::Type(ty)) = args.args.first() {
+                    ty
+                } else {
+                    panic!("RpcError needs a type argument")
+                }
+            } else {
+                panic!("RpcError needs angle bracketed arguments")
+            }
+        };
+
+        let noti_inner_type = match noti_full_type {
+            Type::Path(type_path) => {
+                let segment = type_path
+                    .path
+                    .segments
+                    .last()
+                    .expect("noti field type path must have segments");
+                if segment.ident != "Option" {
+                    panic!("noti field must be of type Option<MTx<T>>");
+                }
+                let args = match &segment.arguments {
+                    syn::PathArguments::AngleBracketed(args) => args,
+                    _ => panic!("Option needs angle bracketed arguments"),
+                };
+                let inner_option_type = match args.args.first() {
+                    Some(syn::GenericArgument::Type(ty)) => ty,
+                    _ => panic!("Option needs a type argument"),
+                };
+                let inner_type_path = match inner_option_type {
+                    Type::Path(p) => p,
+                    _ => panic!("Inner type of Option must be a path type"),
+                };
+                let inner_segment = inner_type_path
+                    .path
+                    .segments
+                    .last()
+                    .expect("Inner type path must have segments");
+                if inner_segment.ident != "MTx" {
+                    panic!("Inner type of Option must be MTx");
+                }
+                let inner_args = match &inner_segment.arguments {
+                    syn::PathArguments::AngleBracketed(args) => args,
+                    _ => panic!("MTx needs angle bracketed arguments"),
+                };
+                match inner_args.args.first() {
+                    Some(syn::GenericArgument::Type(ty)) => ty.clone(),
+                    _ => panic!("MTx needs a type argument"),
+                }
+            }
+            _ => panic!("noti field must be a path type"),
+        };
+
+        let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+
+        let where_clause_with_into = if where_clause.is_some() {
+            quote! { #where_clause, Self: Into<#noti_inner_type> }
+        } else {
+            quote! { where Self: Into<#noti_inner_type> }
+        };
+
+        quote! {
+            impl #impl_generics occams_rpc_stream::client::ClientTaskGetResult<#error_type> for #struct_name #ty_generics #where_clause {
+                #[inline]
+                fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError<#error_type>> {
+                    match self.#res_field_name.as_ref() {
+                        Some(Ok(())) => Ok(()),
+                        Some(Err(e)) => Err(e),
+                        None => Err(&occams_rpc_core::error::RpcError::Rpc(occams_rpc_core::error::RpcIntErr::Internal)),
+                    }
+                }
+            }
+
+            impl #impl_generics occams_rpc_stream::client::ClientTaskDone for #struct_name #ty_generics #where_clause_with_into {
+                #[inline]
+                fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) {
+                    let rpc_error = match res {
+                        occams_rpc_core::error::EncodedErr::Rpc(e) => e.into(),
+                        occams_rpc_core::error::EncodedErr::Num(n) => {
+                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Ok(n as u32)) {
+                                e.into()
+                            } else {
+                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                            }
+                        }
+                        occams_rpc_core::error::EncodedErr::Static(s) => {
+                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Err(s.as_bytes())) {
+                                e.into()
+                            } else {
+                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                            }
+                        }
+                        occams_rpc_core::error::EncodedErr::Buf(b) => {
+                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Err(&b)) {
+                                e.into()
+                            } else {
+                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                            }
+                        }
+                    };
+                    self.#res_field_name = Some(Err(rpc_error));
                 }
 
                 #[inline]
-                fn set_result(mut self, res: Result<(), occams_rpc_core::error::ServerErr>) {
-                    self.#res_field_name.replace(res);
-                    let noti = self.#noti_field_name.take().unwrap();
-                    let _ = noti.send(self.into());
+                fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) {
+                    self.#res_field_name = Some(Err(e.into()));
+                }
+
+                #[inline]
+                fn set_ok(&mut self) {
+                    self.#res_field_name = Some(Ok(()));
+                }
+
+                #[inline]
+                fn done(mut self) {
+                    if let Some(noti) = self.#noti_field_name.take() {
+                        let _ = noti.send(self.into());
+                    }
                 }
             }
         }
@@ -216,7 +396,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 
     let debug_impl = if gen_debug {
         quote! {
-            impl std::fmt::Debug for #struct_name {
+            impl #impl_generics_for_impl std::fmt::Debug for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                     write!(f, "{}(seq={} req={:?}", stringify!(#struct_name), self.seq, &self.#req_field_name)?;
                     if let Some(resp) = &self.#resp_field_name {
@@ -239,7 +419,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 
         #client_task_done_impl
 
-        impl std::ops::Deref for #struct_name {
+        impl #impl_generics_for_impl std::ops::Deref for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             type Target = #common_field_type;
             #[inline]
             fn deref(&self) -> &Self::Target {
@@ -247,14 +427,14 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
-        impl std::ops::DerefMut for #struct_name {
+        impl #impl_generics_for_impl std::ops::DerefMut for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
             fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.#common_field_name
             }
         }
 
-        impl occams_rpc_stream::client::ClientTaskEncode for #struct_name {
+        impl #impl_generics_for_impl occams_rpc_stream::client::ClientTaskEncode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
             fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()> {
                 codec.encode(&self.#req_field_name)
@@ -263,7 +443,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
             #get_req_blob_body
         }
 
-        impl occams_rpc_stream::client::ClientTaskDecode for #struct_name {
+        impl #impl_generics_for_impl occams_rpc_stream::client::ClientTaskDecode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
             fn decode_resp<C: occams_rpc_core::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
                 let resp = codec.decode(buffer)?;
@@ -324,7 +504,8 @@ fn test_missing_resp() {}
 /// ```compile_fail
 /// use occams_rpc_stream_macros::*;
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::ServerErr;
+/// use occams_rpc_core::error::RpcError;
+/// use nix::errno::Errno;
 ///
 /// #[client_task]
 /// pub struct MissingNotiField {
@@ -335,17 +516,15 @@ fn test_missing_resp() {}
 ///     #[field(resp)]
 ///     resp: Option<()>,
 ///     #[field(res)]
-///     res: Option<Result<(), ServerErr>>,
+///     res: Option<Result<(), RpcError<Errno>>>,
 /// }
-/// ```
-#[doc(hidden)]
+/// ```#[doc(hidden)]
 #[allow(dead_code)]
 fn test_missing_noti_field() {}
 
 /// ```compile_fail
 /// use occams_rpc_stream_macros::*;
 /// use occams_rpc_stream::client::ClientTaskCommon;
-/// use occams_rpc_core::error::ServerErr;
 /// use crossfire::MTx;
 ///
 /// #[client_task]

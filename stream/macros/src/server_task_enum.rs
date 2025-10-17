@@ -7,6 +7,7 @@ struct ServerTaskEnumAttrs {
     req: bool,
     resp: bool,
     resp_type: Option<syn::Type>,
+    error: syn::Type,
 }
 
 impl syn::parse::Parse for ServerTaskEnumAttrs {
@@ -14,6 +15,7 @@ impl syn::parse::Parse for ServerTaskEnumAttrs {
         let mut req = false;
         let mut resp = false;
         let mut resp_type = None;
+        let mut error = None;
 
         while !input.is_empty() {
             let lookahead = input.lookahead1();
@@ -26,6 +28,9 @@ impl syn::parse::Parse for ServerTaskEnumAttrs {
                 } else if ident == "resp_type" {
                     input.parse::<syn::Token![=]>()?;
                     resp_type = Some(input.parse()?);
+                } else if ident == "error" {
+                    input.parse::<syn::Token![=]>()?;
+                    error = Some(input.parse()?);
                 } else {
                     return Err(input.error(format!("unexpected attribute: {}", ident)));
                 }
@@ -36,13 +41,18 @@ impl syn::parse::Parse for ServerTaskEnumAttrs {
             }
         }
 
-        Ok(ServerTaskEnumAttrs { req, resp, resp_type })
+        let error = error.ok_or_else(|| {
+            input.error("#[server_task_enum] requires an `error = <Type>` attribute")
+        })?;
+
+        Ok(ServerTaskEnumAttrs { req, resp, resp_type, error })
     }
 }
 
 pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let mut ast = parse_macro_input!(input as DeriveInput);
     let enum_name = &ast.ident;
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
     let variants = if let Data::Enum(ref mut data) = ast.data {
         &mut data.variants
@@ -72,16 +82,16 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
     let macro_attrs = parse_macro_input!(attrs as ServerTaskEnumAttrs);
     let has_req = macro_attrs.req;
     let has_resp = macro_attrs.resp;
-    let resp_type_param = macro_attrs.resp_type;
+    let error_type = macro_attrs.error.clone();
 
     let resp_type = if has_resp {
-        if resp_type_param.is_some() {
+        if macro_attrs.resp_type.is_some() {
             panic!("Cannot specify 'resp_type' when 'resp' is present. Response type is Self.");
         }
         quote! { #enum_name }
     } else {
         let r_type =
-            resp_type_param.expect("resp_type must be specified when 'resp' is not present");
+            macro_attrs.resp_type.expect("resp_type must be specified when 'resp' is not present");
         quote! { #r_type }
     };
 
@@ -177,7 +187,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
         if count == 1 {
             // Only generate if count is 1, prevent duplicate sub-types
             from_impls.push(quote! {
-                impl From<#inner_type> for #enum_name {
+                impl #impl_generics From<#inner_type> for #enum_name #ty_generics #where_clause {
                     #[inline]
                     fn from(task: #inner_type) -> Self {
                         #enum_name::#variant_name(task)
@@ -205,7 +215,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
     let req_impl = if has_req {
         quote! {
 
-            impl occams_rpc_stream::server::ServerTaskDecode<#resp_type> for #enum_name
+            impl #impl_generics occams_rpc_stream::server::ServerTaskDecode<#resp_type> for #enum_name #ty_generics #where_clause
             where
                 #(#where_clauses_for_decode),*
             {
@@ -234,23 +244,23 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
     let resp_impl = if has_resp {
         quote! {
-            impl occams_rpc_stream::server::ServerTaskResp for #enum_name {}
+            impl #impl_generics occams_rpc_stream::server::ServerTaskResp for #enum_name #ty_generics #where_clause {}
 
-            impl occams_rpc_stream::server::ServerTaskEncode for #enum_name {
+            impl #impl_generics occams_rpc_stream::server::ServerTaskEncode for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn encode_resp<'a, C: occams_rpc_core::Codec>(
-                    &'a self,
-                    codec: &'a C,
-                ) -> (u64, Result<(Vec<u8>, Option<&'a io_buffer::Buffer>), occams_rpc_core::error::EncodecErr>) {
+                fn encode_resp<C: occams_rpc_core::Codec>(
+                    self,
+                    codec: &C,
+                ) -> (u64, Result<(Vec<u8>, Option<io_buffer::Buffer>), occams_rpc_core::error::EncodedErr>) {
                     match self {
                         #(#encode_arms)*
                     }
                 }
             }
 
-            impl occams_rpc_stream::server::ServerTaskDone<#enum_name> for #enum_name {
+            impl #impl_generics occams_rpc_stream::server::ServerTaskDone<#resp_type, #error_type> for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn _set_result(&mut self, res: Result<(), occams_rpc_core::error::EncodedErr>) -> occams_rpc_stream::server::RespNoti<#enum_name> {
+                fn _set_result(&mut self, res: Result<(), #error_type>) -> occams_rpc_stream::server::RespNoti<#resp_type> {
                     match self {
                         #(#set_result_arms)*
                     }
@@ -263,7 +273,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
     let get_action_impl = if has_req {
         quote! {
-            impl occams_rpc_stream::server::ServerTaskAction for #enum_name {
+            impl #impl_generics occams_rpc_stream::server::ServerTaskAction for #enum_name #ty_generics #where_clause {
                 #[inline]
                 fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
                     match self {

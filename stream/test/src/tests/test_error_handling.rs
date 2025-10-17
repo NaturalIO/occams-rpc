@@ -2,8 +2,9 @@ use crate::client::*;
 use crate::server::*;
 use crate::*;
 use crossfire::mpsc;
-use occams_rpc_core::error::ServerErr;
-use occams_rpc_stream::client::{ClientConfig, ClientTaskDone};
+use nix::errno::Errno;
+use occams_rpc_core::error::{RpcErrCodec, RpcError};
+use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskGetResult};
 use occams_rpc_stream::server::{ServerConfig, ServerTaskDone};
 
 #[logfn]
@@ -19,7 +20,7 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
             match task {
                 FileServerTask::Open(open_task) => {
                     info!("Server received Open task, will return error: {:?}", open_task.req);
-                    open_task.set_result(Err("Permission denied".into()));
+                    open_task.set_result(Err(Errno::EACCES));
                     Ok(())
                 }
                 FileServerTask::IO(mut io_task) => {
@@ -52,7 +53,7 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
 
         let result = completed_open_task.get_result();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), &ServerErr::Str("Permission denied"));
+        assert_eq!(result.unwrap_err(), &RpcError::User(Errno::EACCES));
         log::info!("Open task failed as expected.");
 
         // Test a Write task that should succeed

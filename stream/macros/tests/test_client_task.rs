@@ -1,9 +1,15 @@
 use crossfire::*;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::{Codec, error::*};
+use occams_rpc_core::{
+    Codec,
+    error::{RpcErrCodec, RpcError, RpcIntErr},
+};
 use occams_rpc_stream::client::{
     ClientTaskAction, ClientTaskCommon, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
+    ClientTaskGetResult,
 };
+
+use nix::errno::Errno;
 use occams_rpc_stream::proto::RpcAction;
 use occams_rpc_stream_macros::client_task;
 use serde_derive::{Deserialize, Serialize};
@@ -343,35 +349,35 @@ fn test_client_task_macro_static_action() {
     assert_eq!(new_task_enum.get_action(), RpcAction::Num(Action::Write as i32));
 }
 
+#[client_task]
+pub struct TaskWithDone {
+    #[field(common)]
+    common: ClientTaskCommon,
+    #[field(req)]
+    req: (),
+    #[field(resp)]
+    resp: Option<()>,
+    #[field(res)]
+    res: Option<Result<(), RpcError<Errno>>>,
+    #[field(noti)]
+    noti: Option<MTx<Self>>,
+}
+
 #[test]
 fn test_client_task_macro_with_done() {
-    #[client_task]
-    #[derive(Debug)]
-    pub struct TaskWithDone {
-        #[field(common)]
-        common: ClientTaskCommon,
-        #[field(req)]
-        req: (),
-        #[field(resp)]
-        resp: Option<()>,
-        #[field(res)]
-        res: Option<Result<(), ServerErr>>,
-        #[field(noti)]
-        noti: Option<MTx<Self>>,
-    }
-
     // Test with Ok result
     let (done_tx, done_rx) = mpsc::unbounded_blocking();
-    let task_ok = TaskWithDone {
+    let mut task_ok = TaskWithDone {
         common: ClientTaskCommon { seq: 1, ..Default::default() },
-        req: (),
+        req: (()),
         resp: None,
         res: None,
         noti: Some(done_tx.clone()),
     };
-    assert_eq!(task_ok.get_result(), Err(&RPC_ERR_INTERNAL));
+    assert_eq!(task_ok.get_result(), Err(&RpcError::Rpc(RpcIntErr::Internal)));
 
-    task_ok.set_result(Ok(()));
+    task_ok.set_ok();
+    task_ok.done();
 
     let received_task_ok = done_rx.recv().unwrap();
     assert_eq!(received_task_ok.common.seq, 1);
@@ -380,22 +386,26 @@ fn test_client_task_macro_with_done() {
     assert_eq!(received_task_ok.get_result(), Ok(()));
 
     // Test with Err result
-    let task_err = TaskWithDone {
+    let codec = MsgpCodec::default();
+    let mut task_err = TaskWithDone {
         common: ClientTaskCommon { seq: 2, ..Default::default() },
-        req: (),
+        req: (()),
         resp: None,
         res: None,
         noti: Some(done_tx.clone()),
     };
-    assert_eq!(task_err.get_result(), Err(&RPC_ERR_INTERNAL));
+    assert_eq!(task_err.get_result(), Err(&RpcError::Rpc(RpcIntErr::Internal)));
 
-    task_err.set_result(Err(ServerErr::Num(2)));
+    let custom_error = Errno::EAGAIN;
+    let encoded_error = custom_error.encode(&codec);
+    task_err.set_custom_error(&codec, encoded_error);
+    task_err.done();
 
     let received_task_err = done_rx.recv().unwrap();
     assert_eq!(received_task_err.common.seq, 2);
-    assert_eq!(received_task_err.res, Some(Err(ServerErr::Num(2))));
+    assert_eq!(received_task_err.res, Some(Err(RpcError::User(custom_error))));
     assert!(received_task_err.noti.is_none());
-    assert_eq!(received_task_err.get_result(), Err(&ServerErr::Num(2)));
+    assert_eq!(received_task_err.get_result(), Err(&RpcError::User(custom_error)));
 }
 
 #[test]

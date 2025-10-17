@@ -3,7 +3,8 @@
 #[allow(dead_code)]
 fn test_client_task_enum_define() {
     use crossfire::MTx;
-    use occams_rpc_core::error::ServerErr;
+    use nix::errno::Errno;
+    use occams_rpc_core::error::RpcError;
     use occams_rpc_stream::client::ClientTaskCommon;
     use occams_rpc_stream_macros::{client_task, client_task_enum};
 
@@ -23,7 +24,7 @@ fn test_client_task_enum_define() {
         #[field(resp)]
         resp: Option<()>,
         #[field(res)]
-        res: Option<Result<(), ServerErr>>,
+        res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
         noti: Option<MTx<FileTask>>,
     }
@@ -37,12 +38,12 @@ fn test_client_task_enum_define() {
         #[field(resp)]
         resp: Option<()>,
         #[field(res)]
-        res: Option<Result<(), ServerErr>>,
+        res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
         noti: Option<MTx<FileTask>>,
     }
 
-    #[client_task_enum]
+    #[client_task_enum(error = Errno)]
     #[derive(Debug)]
     pub enum FileTask {
         #[action(FileAction::Open)]

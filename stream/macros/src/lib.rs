@@ -46,7 +46,7 @@ mod server_task_enum;
 /// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `occams_rpc_core::io::AllocateBuf`.
 ///
 /// * `#[field(res)]`: (Optional) When used with `#[field(noti)]`, triggers automatic `ClientTaskDone` implementation.
-///   Must be of type `Option<Result<(), ServerErr>>`. Stores the final result of the task.
+///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `RpcErrCodec`. Stores the final result of the task.
 ///
 /// * `#[field(noti)]`: (Optional) When used with `#[field(res)]`, triggers automatic `ClientTaskDone` implementation.
 ///   Must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`) to notify of task completion.
@@ -54,11 +54,12 @@ mod server_task_enum;
 /// ### Example of Automatic `ClientTaskDone`
 ///
 /// ```rust
-/// use occams_rpc_stream::client::{ClientTaskCommon, ClientTaskDone};
-/// use occams_rpc_core::error::ServerErr;
+/// use occams_rpc_core::error::{RpcError, RpcErrCodec};
+/// use nix::errno::Errno;
 /// use occams_rpc_stream_macros::client_task;
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
+/// use occams_rpc_stream::client::*;
 ///
 /// #[derive(Debug, Default, Deserialize, Serialize)]
 /// pub struct FileReadReq {
@@ -82,14 +83,14 @@ mod server_task_enum;
 ///     #[field(resp)]
 ///     resp: Option<FileReadResp>,
 ///     #[field(res)]
-///     res: Option<Result<(), ServerErr>>,
+///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
 ///     noti: Option<MTx<Self>>,
 /// }
 ///
 /// // Usage
 /// let (tx, rx) = mpsc::unbounded_blocking::<FileReadTask>();
-/// let task = FileReadTask {
+/// let mut task = FileReadTask {
 ///     common: ClientTaskCommon { seq: 1, ..Default::default() },
 ///     req: FileReadReq { path: "/path/to/file".to_string(), offset: 0, len: 1024 },
 ///     resp: None,
@@ -97,9 +98,8 @@ mod server_task_enum;
 ///     noti: Some(tx),
 /// };
 ///
-/// // When the task is done, `set_result` is called.
-/// // The macro-generated implementation will populate `res` and send the task through `noti`.
-/// task.set_result(Ok(()));
+/// task.set_ok();
+/// task.done();
 ///
 /// let completed_task = rx.recv().unwrap();
 /// assert_eq!(completed_task.common.seq, 1);
@@ -135,7 +135,8 @@ pub fn client_task(
 ///
 /// ```rust
 /// use occams_rpc_stream::client::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
-/// use occams_rpc_core::error::ServerErr;
+/// use occams_rpc_core::error::{RpcError, RpcErrCodec};
+/// use nix::errno::Errno;
 /// use occams_rpc_stream_macros::{client_task, client_task_enum};
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
@@ -157,7 +158,7 @@ pub fn client_task(
 ///     #[field(resp)]
 ///     resp: Option<()>,
 ///     #[field(res)]
-///     res: Option<Result<(), ServerErr>>,
+///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
 ///     noti: Option<MTx<FileTask>>,
 /// }
@@ -172,12 +173,12 @@ pub fn client_task(
 ///     #[field(resp)]
 ///     resp: Option<()>,
 ///     #[field(res)]
-///     res: Option<Result<(), ServerErr>>,
+///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
 ///     noti: Option<MTx<FileTask>>,
 /// }
 ///
-/// #[client_task_enum]
+/// #[client_task_enum(error = Errno)]
 /// #[derive(Debug)]
 /// pub enum FileTask {
 ///     #[action(FileAction::Open)]
@@ -199,7 +200,8 @@ pub fn client_task(
 ///
 /// let mut file_task: FileTask = open_task.into();
 /// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(1));
-/// file_task.set_result(Ok(()));
+/// file_task.set_ok();
+/// file_task.done();
 ///
 /// let received = rx.recv().unwrap();
 /// assert!(matches!(received, FileTask::Open(_)));
@@ -215,7 +217,8 @@ pub fn client_task(
 ///
 /// let mut file_task: FileTask = close_task.into();
 /// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(2));
-/// file_task.set_result(Ok(()));
+/// file_task.set_ok();
+/// file_task.done();
 ///
 /// let received = rx.recv().unwrap();
 /// assert!(matches!(received, FileTask::Close(_)));
@@ -251,6 +254,7 @@ pub fn client_task_enum(
 /// use occams_rpc_stream::server_impl::ServerTaskVariant;
 /// use occams_rpc_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
+/// use nix::errno::Errno;
 ///
 /// #[derive(PartialEq)]
 /// #[repr(u8)]
@@ -268,13 +272,13 @@ pub fn client_task_enum(
 /// struct FileIOReq { pub path: String, pub offset: u64, pub len: u64, }
 ///
 ///
-/// #[server_task_enum(req, resp)]
+/// #[server_task_enum(req, resp, error=Errno)]
 /// #[derive(Debug)]
 /// pub enum FileTask {
 ///     #[action(FileAction::Open)]
-///     Open(ServerTaskVariant<FileTask, FileOpenReq>),
+///     Open(ServerTaskVariant<FileTask, FileOpenReq, Errno>),
 ///     #[action(FileAction::Read, FileAction::Write, FileAction::Truncate)]
-///     Read(ServerTaskVariant<FileTask, FileIOReq>),
+///     Read(ServerTaskVariant<FileTask, FileIOReq, Errno>),
 /// }
 /// ```
 #[proc_macro_attribute]

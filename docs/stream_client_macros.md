@@ -99,7 +99,7 @@ The macro processes specific fields within the task struct based on the `#[field
 *  `#[field(res)]` and `#[field(noti)]`:
     *   **Purpose:** When both are present, the macro generates an implementation of the `ClientTaskDone` trait. This is used to signal the completion of a task and deliver its result.
     *   **Requirements:**
-        *   The field marked with `#[field(res)]` must be of type `Option<Result<(), RpcError>>`. This field will be populated with the task's outcome (`Ok(())` for success, `Err(RpcError)` for failure).
+        *   The field marked with `#[field(res)]` must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `RpcErrCodec`. This field will be populated with the task's outcome (`Ok(())` for success, `Err(RpcError<E>)` for failure).
         *   The field marked with `#[field(noti)]` must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`). When the task is completed, the entire task struct (with the `res` field populated) is sent through this channel.
 
 
@@ -120,16 +120,15 @@ The `#[client_task]` macro automatically generates the following trait implement
 
 *   `ClientTaskDone`:
     *   This trait is implemented when `#[field(res)]` and `#[field(noti)]` are present.
-    ```rust
-    impl occams_rpc::stream::client::ClientTaskDone for T {
-        fn set_result(mut self, res: Result<(), RpcError>) {
-            self.res = Some(res);
-            if let Some(noti) = self.noti.take() {
-                noti.send(self.into()).ok();
-            }
+    *   The generated implementation provides the following methods:
+        ```rust
+        impl<E: occams_rpc_core::error::RpcErrCodec> occams_rpc::stream::client::ClientTaskDone for T {
+            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) { /* ... */ }
+            fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) { /* ... */ }
+            fn set_ok(&mut self) { /* ... */ }
+            fn done(self) { /* ... */ }
         }
-    }
-    ```
+        ```
 
 *   when `#[client_task(debug)]` is specified, you will get a more specific Debug generated according to the `req` and `resp` fields
     ```rust
@@ -149,8 +148,8 @@ The `#[client_task_enum]` will implement `From` to assist conversion from its va
 
 ## User Responsibilities
 
-Users are always responsible for calling `set_result()` to signal task completion.
+Users are responsible for implementing the `occams_rpc_core::error::RpcErrCodec` trait for their custom error types, which are then used with `RpcError<E>`. The framework handles calling `set_ok()`, `set_rpc_error()`, `set_custom_error()`, and `done()` to signal task completion.
 
-If the `#[field(res)]` and `#[field(noti)]` attributes are not used, the user must also implement the `ClientTaskDone` trait, which provides the `set_result()` method. When these attributes are used, the macro generates this implementation automatically.
+If the `#[field(res)]` and `#[field(noti)]` attributes are not used, the user must implement the `ClientTaskDone` trait manually. When these attributes are used, the macro generates this implementation automatically.
 
 **Note:** The implementation of `ClientTaskAction` is optional for structs decorated with `#[client_task]`. If `ClientTaskAction` is not implemented by the struct, then the `#[client_task_enum]` variant wrapping it must provide an `#[action]` attribute.

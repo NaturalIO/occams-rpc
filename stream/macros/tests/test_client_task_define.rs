@@ -3,7 +3,8 @@
 #[allow(dead_code)]
 fn test_client_task_define() {
     use crossfire::MTx;
-    use occams_rpc_core::error::ServerErr;
+    use nix::errno::Errno;
+    use occams_rpc_core::error::RpcError;
     use occams_rpc_stream::client::ClientTaskCommon;
     use occams_rpc_stream_macros::client_task;
     use serde_derive::{Deserialize, Serialize};
@@ -37,7 +38,7 @@ fn test_client_task_define() {
         #[field(resp)]
         resp: Option<FileIOResp>,
         #[field(res)]
-        res: Option<Result<(), ServerErr>>,
+        res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
         noti: Option<MTx<Self>>,
     }
@@ -53,7 +54,7 @@ fn test_client_task_define() {
         #[field(resp_blob)]
         resp_blob: Option<Vec<u8>>,
         #[field(res)]
-        res: Option<Result<(), ServerErr>>,
+        res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
         noti: Option<MTx<Self>>,
     }

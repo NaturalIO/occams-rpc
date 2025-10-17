@@ -257,24 +257,23 @@ pub enum EncodedErr {
     /// The ClientTransport will fallback to Vec<u8> after try to parse  RpcIntErr and  num
     Buf(Vec<u8>),
 }
-//
-//impl EncodedErr {
-//    #[inline]
-//    pub fn try_as_str<'a>(&'a self) -> Result<&'a str, ()> {
-//        match self {
-//            Self::Str(s) => return Ok(s),
-//            Self::Text(s) => return Ok(s.as_str()),
-//            Self::Buf(b) => {
-//                if let Ok(s) = str::from_utf8(b) {
-//                    return Ok(s);
-//                }
-//            }
-//            _ => {}
-//        }
-//        Err(())
-//    }
-//}
-//
+
+impl EncodedErr {
+    #[inline]
+    pub fn try_as_str<'a>(&'a self) -> Result<&'a str, ()> {
+        match self {
+            Self::Static(s) => return Ok(s),
+            Self::Buf(b) => {
+                if let Ok(s) = str::from_utf8(b) {
+                    return Ok(s);
+                }
+            }
+            _ => {}
+        }
+        Err(())
+    }
+}
+
 //impl std::cmp::PartialEq<RpcIntErr> for EncodedErr {
 //    fn eq(&self, other: &RpcIntErr) -> bool {
 //        if let Self::Rpc(r) = self {
@@ -286,44 +285,41 @@ pub enum EncodedErr {
 //    }
 //}
 //
-//impl std::cmp::PartialEq<EncodedErr> for EncodedErr {
-//    fn eq(&self, other: &EncodedErr) -> bool {
-//        match self {
-//            Self::Rpc(e) => {
-//                if let Self::Rpc(o) = other {
-//                    return e == o;
-//                }
-//            }
-//            Self::Num(e) => {
-//                if let Self::Num(o) = other {
-//                    return e == o;
-//                }
-//            }
-//            Self::Str(s) => {
-//                if let Ok(o) = other.try_as_str() {
-//                    return *s == o;
-//                }
-//            }
-//            Self::Text(s) => {
-//                if let Ok(o) = other.try_as_str() {
-//                    return s == o;
-//                }
-//            }
-//            Self::Buf(s) => {
-//                if let Self::Buf(o) = other {
-//                    return s == o;
-//                } else if let Ok(o) = other.try_as_str() {
-//                    // other's type is not Buf
-//                    if let Ok(_s) = str::from_utf8(s) {
-//                        return _s == o;
-//                    }
-//                }
-//            }
-//        }
-//        false
-//    }
-//}
-//
+
+/// Just for macro test
+impl std::cmp::PartialEq<EncodedErr> for EncodedErr {
+    fn eq(&self, other: &EncodedErr) -> bool {
+        match self {
+            Self::Rpc(e) => {
+                if let Self::Rpc(o) = other {
+                    return e == o;
+                }
+            }
+            Self::Num(e) => {
+                if let Self::Num(o) = other {
+                    return e == o;
+                }
+            }
+            Self::Static(s) => {
+                if let Ok(o) = other.try_as_str() {
+                    return *s == o;
+                }
+            }
+            Self::Buf(s) => {
+                if let Self::Buf(o) = other {
+                    return s == o;
+                } else if let Ok(o) = other.try_as_str() {
+                    // other's type is not Buf
+                    if let Ok(_s) = str::from_utf8(s) {
+                        return _s == o;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
 impl fmt::Display for EncodedErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
