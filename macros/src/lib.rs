@@ -133,7 +133,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             match req.method.as_str() {
                                 #(#method_handlers)*
                                 _ => {
-                                    req.set_error(occams_rpc_core::error::RPC_ERR_METHOD_NOT_FOUND);
+                                    req.set_error(occams_rpc_core::error::RpcIntErr::Method.into());
                                 }
                             }
                         }
