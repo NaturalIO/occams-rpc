@@ -46,7 +46,7 @@ mod server_task_enum;
 /// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `occams_rpc_core::io::AllocateBuf`.
 ///
 /// * `#[field(res)]`: (Optional) When used with `#[field(noti)]`, triggers automatic `ClientTaskDone` implementation.
-///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `RpcErrCodec`. Stores the final result of the task.
+///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `occams_rpc_core::error::RpcErrCodec`. Stores the final result of the task.
 ///
 /// * `#[field(noti)]`: (Optional) When used with `#[field(res)]`, triggers automatic `ClientTaskDone` implementation.
 ///   Must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`) to notify of task completion.
@@ -54,7 +54,7 @@ mod server_task_enum;
 /// ### Example of Automatic `ClientTaskDone`
 ///
 /// ```rust
-/// use occams_rpc_core::error::{RpcError, RpcErrCodec};
+/// use occams_rpc_core::error::RpcError;
 /// use nix::errno::Errno;
 /// use occams_rpc_stream_macros::client_task;
 /// use serde_derive::{Deserialize, Serialize};
@@ -135,7 +135,7 @@ pub fn client_task(
 ///
 /// ```rust
 /// use occams_rpc_stream::client::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
-/// use occams_rpc_core::error::{RpcError, RpcErrCodec};
+/// use occams_rpc_core::error::RpcError;
 /// use nix::errno::Errno;
 /// use occams_rpc_stream_macros::{client_task, client_task_enum};
 /// use serde_derive::{Deserialize, Serialize};

@@ -171,12 +171,14 @@ impl<F: ClientFactory> TcpClient<F> {
                     logger_warn!(self.logger, "{:?} rpc client reader decode resp err", self,);
                     task.set_rpc_error(RpcIntErr::Decode);
                     factory.error_handle(task);
+                    return Ok(());
                 } else {
                     task.set_ok();
                 }
             } else {
                 task.set_ok();
             }
+            task.done();
             return Ok(());
         } else {
             let seq = resp_head.seq;

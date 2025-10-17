@@ -82,6 +82,7 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
         let req_size = req_buf.len() + RPC_REQ_HEADER_LEN + data_len as usize;
         task.set_ok();
         task.done();
+        println!("pre recv");
         let _ = rx.recv().await; // consume one channel tx ref
         println!("req_size: {}", req_size);
 

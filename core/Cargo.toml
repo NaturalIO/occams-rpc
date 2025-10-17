@@ -28,5 +28,6 @@ nix = "0"
 thiserror = "2"
 
 [dev-dependencies]
+serde_derive = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rand = "0.8"

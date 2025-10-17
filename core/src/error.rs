@@ -96,8 +96,9 @@ impl<E: RpcErrCodec> From<RpcIntErr> for RpcError<E> {
 ///
 /// ```rust
 /// use serde_derive::{Serialize, Deserialize};
-/// use occams_rpc_core::{error::{RpcErrCodec, RpcIntErr}, Codec};
-/// #[derive(Serialize, Deserialize)]
+/// use occams_rpc_core::{error::{RpcErrCodec, RpcIntErr, EncodedErr}, Codec};
+/// use strum::Display;
+/// #[derive(Serialize, Deserialize, Debug, Display)]
 /// pub enum MyError {
 ///     NoSuchFile,
 ///     TooManyRequest,

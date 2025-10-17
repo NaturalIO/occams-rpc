@@ -3,8 +3,8 @@ use crate::server::*;
 use crate::*;
 use crossfire::mpsc;
 use nix::errno::Errno;
-use occams_rpc_core::error::{RpcErrCodec, RpcError};
-use occams_rpc_stream::client::{ClientConfig, ClientTaskDone, ClientTaskGetResult};
+use occams_rpc_core::error::RpcError;
+use occams_rpc_stream::client::{ClientConfig, ClientTaskGetResult};
 use occams_rpc_stream::server::{ServerConfig, ServerTaskDone};
 
 #[logfn]
