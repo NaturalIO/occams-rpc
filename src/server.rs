@@ -1,7 +1,7 @@
 use io_buffer::Buffer;
 use occams_rpc_core::{
     Codec,
-    error::{EncodedErr, RpcErrCodec, RpcIntErr},
+    error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr},
 };
 use occams_rpc_stream::server::{RespNoti, RespReceiver};
 use serde::{Deserialize, Serialize};
@@ -45,12 +45,12 @@ impl<C: Codec> Request<C> {
     }
 
     #[inline(always)]
-    pub fn set_custom_error<E: RpcErrCodec>(self, e: E) {
-        self.noti.done(Response {
-            seq: self.seq,
-            msg: None,
-            res: Err(e.encode(self.codec.as_ref())),
-        });
+    pub fn set_error<E: RpcErrCodec>(self, e: RpcError<E>) {
+        let encoded_err = match e {
+            RpcError::Rpc(rpc_int_err) => rpc_int_err.into(),
+            RpcError::User(user_err) => user_err.encode(self.codec.as_ref()),
+        };
+        self.noti.done(Response { seq: self.seq, msg: None, res: Err(encoded_err) });
     }
 }
 

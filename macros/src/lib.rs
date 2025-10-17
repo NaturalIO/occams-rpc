@@ -38,7 +38,7 @@ pub fn method(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// - When applied to an inherent `impl` block, methods intended as service methods should be marked with `#[method]`.
 /// - When applied to a trait `impl` block, all methods defined in the trait will be registered as service methods.
-/// - The macro can handle methods with different user-defined error types (e.g. `String`, `i32`, `nix::errno::Errno`) in the same `impl` block.
+/// - All service methods must return `Result<T, RpcError<E>>`, where `E` is a user-defined error type that implements `RpcErrCodec`.
 ///
 /// The service method recognizes:
 /// - `fn` (which is considered non-blocking)
@@ -124,8 +124,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     async fn #handler_name<C: Codec>(&self, req: Request<C>) {
                         let arg = match req.req.as_ref() {
                             None => {
-                                req.set_rpc_error(occams_rpc_core::error::RpcIntErr::Decode);
-                                return;
+                                unreachable!();
                             }
                             Some(buf) => match req.codec.decode::<#arg_ty>(&buf) {
                                 Ok(arg) => arg,
@@ -143,7 +142,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 req.set_result(resp);
                             }
                             Err(e) => {
-                                req.set_custom_error(e);
+                                req.set_error(e);
                             }
                         }
                     }

@@ -1,7 +1,7 @@
 use occams_rpc::server::{Request, Response, ServiceTrait};
 use occams_rpc_api_macros::{method, service, service_mux_struct};
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::Codec;
+use occams_rpc_core::{error::RpcError, Codec};
 use occams_rpc_stream::server::RespNoti;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -30,23 +30,23 @@ pub struct MultiErrorServiceImpl;
 #[service]
 impl MultiErrorServiceImpl {
     #[method]
-    async fn success_method(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn success_method(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value + 1 })
     }
 
     #[method]
-    async fn string_error(&self, _arg: MyArg) -> Result<MyResp, String> {
-        Err("string error".to_string())
+    async fn string_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<String>> {
+        Err("string error".to_string().into())
     }
 
     #[method]
-    async fn i32_error(&self, _arg: MyArg) -> Result<MyResp, i32> {
-        Err(42)
+    async fn i32_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<i32>> {
+        Err(42.into())
     }
 
     #[method]
-    async fn errno_error(&self, _arg: MyArg) -> Result<MyResp, nix::errno::Errno> {
-        Err(nix::errno::Errno::EPERM)
+    async fn errno_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<nix::errno::Errno>> {
+        Err(nix::errno::Errno::EPERM.into())
     }
 }
 
@@ -57,7 +57,7 @@ impl ImplFutureServiceImpl {
     #[method]
     pub fn add(
         &self, arg: MyArg,
-    ) -> impl std::future::Future<Output = Result<MyResp, String>> + Send {
+    ) -> impl std::future::Future<Output = Result<MyResp, RpcError<String>>> + Send {
         async move { Ok(MyResp { result: arg.value + 1 }) }
     }
 }
@@ -65,13 +65,13 @@ impl ImplFutureServiceImpl {
 // Service using async_trait
 #[async_trait::async_trait]
 pub trait MyAsyncTraitService {
-    async fn mul(&self, arg: MyArg) -> Result<MyResp, String>;
+    async fn mul(&self, arg: MyArg) -> Result<MyResp, RpcError<String>>;
 }
 pub struct MyAsyncTraitServiceImpl;
 #[async_trait::async_trait]
 #[service]
 impl MyAsyncTraitService for MyAsyncTraitServiceImpl {
-    async fn mul(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn mul(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value * 2 })
     }
 }

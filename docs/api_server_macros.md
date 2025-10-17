@@ -3,7 +3,7 @@
 ## Requirement
 
 - Provide similar functionality to GRPC
-- All service method should have one arg `A` and one response of `Result<T, E>`, where `E` is a user-defined error type that implements `RpcErrCodec`. `A` and `T` may be empty structs.
+- All service method should have one arg `A` and one response of `Result<T, RpcError<E>>`, where `E` is a user-defined error type that implements `RpcErrCodec`. `A` and `T` may be empty structs.
 
 ## Trait
 
@@ -48,6 +48,7 @@ The macro will iterate all methods and generate a `ServiceTrait::serve()` implem
 
 ```rust
 use occams_rpc_api_macros::{method, service};
+use occams_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -66,14 +67,14 @@ pub struct MyServiceInherentImpl;
 #[service]
 impl MyServiceInherentImpl {
     #[method]
-    async fn mul(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn mul(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value * 2 })
     }
 
     #[method]
-    fn div(&self, arg: MyArg) -> Result<MyResp, i32> {
+    fn div(&self, arg: MyArg) -> Result<MyResp, RpcError<i32>> {
         if arg.value == 0 {
-            return Err(1); // Return an i32 error
+            return Err(1.into()); // Return an i32 error
         }
         Ok(MyResp { result: arg.value / 2 })
     }
@@ -84,14 +85,15 @@ impl MyServiceInherentImpl {
 
 ```rust
 use occams_rpc_api_macros::service;
+use occams_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
 // Assuming MyArg and MyResp are defined as above
 
 pub trait MyService {
-    fn add(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, String>> + Send;
-    fn sub(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, String>> + Send;
+    fn add(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError<String>>> + Send;
+    fn sub(&self, arg: MyArg) -> impl Future<Output = Result<MyResp, RpcError<String>>> + Send;
 }
 
 #[derive(Clone)]
@@ -99,11 +101,11 @@ pub struct MyServiceTraitImpl;
 
 #[service]
 impl MyService for MyServiceTraitImpl {
-    async fn add(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value + 10 })
     }
 
-    async fn sub(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value - 10 })
     }
 }
@@ -119,6 +121,7 @@ Each field in the struct must hold a service that implements `ServiceTrait` (e.g
 
 ```rust
 use occams_rpc_api_macros::{service, service_mux_struct, method};
+use occams_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -133,7 +136,7 @@ pub struct MyFirstService;
 #[service]
 impl MyFirstService {
     #[method]
-    async fn add(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn add(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value + 1 })
     }
 }
@@ -143,7 +146,7 @@ pub struct MySecondService;
 #[service]
 impl MySecondService {
     #[method]
-    async fn sub(&self, arg: MyArg) -> Result<MyResp, String> {
+    async fn sub(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value - 1 })
     }
 }
@@ -167,4 +170,3 @@ pub struct MyServiceDispatcher {
 //     }
 // }
 ```
-
