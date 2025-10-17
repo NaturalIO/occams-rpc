@@ -37,7 +37,6 @@ The `#[service]` macro is applied to an `impl` block to automatically generate t
 -   The macro can handle methods with different user-defined error types (e.g. `String`, `i32`, `nix::errno::Errno`) in the same `impl` block.
 
 The service method recognizes:
-- `fn` (which is considered non-blocking)
 - `async fn`
 - `impl Future`
 - trait methods wrapped by `async_trait`
@@ -72,7 +71,7 @@ impl MyServiceInherentImpl {
     }
 
     #[method]
-    fn div(&self, arg: MyArg) -> Result<MyResp, RpcError<i32>> {
+    async fn div(&self, arg: MyArg) -> Result<MyResp, RpcError<i32>> {
         if arg.value == 0 {
             return Err(1.into()); // Return an i32 error
         }
@@ -161,7 +160,7 @@ pub struct MyServiceDispatcher {
 // The generated `serve` will look something like this:
 //
 // impl<C: Codec> ServiceTrait<C> for MyServiceDispatcher {
-//     fn serve(&self, req: Request<C>) -> ... {
+//     async fn serve(&self, req: Request<C>) -> ... {
 //         match req.service.as_str() {
 //             "my_first" => self.my_first.serve(req).await,
 //             "my_second" => self.my_second.serve(req).await,
