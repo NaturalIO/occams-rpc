@@ -379,6 +379,16 @@ mod tests {
 
         let e = RpcError::<String>::from(RpcIntErr::IO);
         println!("err {:?} {}", e, e);
+
+        let _e: Result<(), RpcIntErr> = Err(RpcIntErr::IO);
+
+        // let e: Result<(), RpcError::<String>> = _e.into();
+        // Not allow by rust, and orphan rule prevent we do
+        // `impl<E: RpcErrCodec> From<Result<(), RpcIntErr>> for Result<(), RpcError<E>>`
+
+        // it's ok to use map_err
+        let e: Result<(), RpcError<String>> = _e.map_err(|e| e.into());
+        println!("err {:?}", e);
     }
 
     //#[test]
