@@ -91,18 +91,15 @@ async fn test_multi_error_service() {
 
 #[tokio::test]
 async fn test_impl_future_service() {
-    assert_eq!(
-        <ImplFutureServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME,
-        "ImplFutureServiceImpl"
-    );
-    let service_impl = ImplFutureServiceImpl;
+    assert_eq!(<ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME, "ImplFutureService");
+    let service_impl = ImplFutureService;
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();
     let noti = RespNoti::new(tx);
 
     let req = create_mock_request(
         1,
-        <ImplFutureServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
         "add".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
@@ -145,7 +142,7 @@ async fn test_async_trait_service() {
 async fn test_service_mux_struct() {
     let services = MyServices {
         multi: Arc::new(MultiErrorServiceImpl),
-        impl_future: Arc::new(ImplFutureServiceImpl),
+        impl_future: Arc::new(ImplFutureService),
     };
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();
@@ -169,7 +166,7 @@ async fn test_service_mux_struct() {
     // Test routing to the 'impl_future' service
     let req = create_mock_request(
         2,
-        <ImplFutureServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
         "add".to_string(),
         &MyArg { value: 20 },
         noti.clone(),

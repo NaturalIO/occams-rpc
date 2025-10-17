@@ -51,9 +51,9 @@ impl MultiErrorServiceImpl {
 }
 
 // Service with `impl Future` return type (non-async fn)
-pub struct ImplFutureServiceImpl;
+pub struct ImplFutureService;
 #[service]
-impl ImplFutureServiceImpl {
+impl ImplFutureService {
     #[method]
     pub fn add(
         &self, arg: MyArg,
@@ -80,5 +80,5 @@ impl MyAsyncTraitService for MyAsyncTraitServiceImpl {
 #[service_mux_struct]
 pub struct MyServices {
     pub multi: Arc<MultiErrorServiceImpl>,
-    pub impl_future: Arc<ImplFutureServiceImpl>,
+    pub impl_future: Arc<ImplFutureService>,
 }
