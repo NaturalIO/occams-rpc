@@ -52,6 +52,17 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
     match input {
         Item::Impl(item_impl) => {
             let self_ty = &item_impl.self_ty;
+            let service_name = if let Some((_, path, _)) = &item_impl.trait_ {
+                path.segments.last().unwrap().ident.to_string()
+            } else {
+                let ty_path = if let Type::Path(type_path) = self_ty.as_ref() {
+                    type_path
+                } else {
+                    panic!("Expected a path for self_ty");
+                };
+                ty_path.path.segments.last().unwrap().ident.to_string()
+            };
+            let service_name_pascal = service_name;
 
             let methods_data: Vec<_> = item_impl
                 .items
@@ -170,6 +181,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
 
                 impl #service_trait_impl_generics ServiceTrait<C> for #self_ty #service_trait_where_clause {
+                    const SERVICE_NAME: &'static str = #service_name_pascal;
                     fn serve(&self, req: Request<C>) -> impl std::future::Future<Output = ()> + Send {
                         async move {
                             match req.method.as_str() {
@@ -209,14 +221,15 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
 
     let field_handlers = fields.iter().map(|field| {
         let field_name = field.ident.as_ref().unwrap();
-        let field_name_str = field_name.to_string();
+        let field_type = &field.ty;
         quote! {
-            #field_name_str => self.#field_name.serve(req).await,
+            <#field_type as ServiceTrait<C>>::SERVICE_NAME => self.#field_name.serve(req).await,
         }
     });
 
     let expanded = quote! {
         impl<C: Codec> ServiceTrait<C> for #struct_name {
+            const SERVICE_NAME: &'static str = "";
             fn serve(&self, req: Request<C>) -> impl std::future::Future<Output = ()> + Send {
                 async move {
                     match req.service.as_str() {

@@ -88,6 +88,7 @@ impl RespReceiver for RespReceiverAPI {
 
 /// Generate code by macro
 pub trait ServiceTrait<C: Codec>: Send + Sized + 'static {
+    const SERVICE_NAME: &'static str;
     /// match req.method
     ///     match req.decode::<RequestType>() {
     ///         Err(())=>{
@@ -109,6 +110,7 @@ pub trait ServiceTrait<C: Codec>: Send + Sized + 'static {
 }
 
 impl<S: ServiceTrait<C> + Sync + Send, C: Codec> ServiceTrait<C> for Arc<S> {
+    const SERVICE_NAME: &'static str = S::SERVICE_NAME;
     #[inline]
     fn serve(&self, req: Request<C>) -> impl Future<Output = ()> + Send {
         self.as_ref().serve(req)
