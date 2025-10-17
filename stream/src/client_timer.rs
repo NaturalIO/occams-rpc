@@ -88,8 +88,9 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
         }
         for key in task_seqs {
             let mut task_item = self.sent_tasks.remove(&key).unwrap();
-            let task = task_item.task.take().unwrap();
-            factory.error_handle(task, RpcIntErr::IO);
+            let mut task = task_item.task.take().unwrap();
+            task.set_rpc_error(RpcIntErr::IO);
+            factory.error_handle(task);
         }
         for tasks_batch_in_second in self.delay_tasks_queue.iter_mut() {
             let mut task_seqs: Vec<u64> = Vec::with_capacity(tasks_batch_in_second.tasks.len());
@@ -98,8 +99,9 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
             }
             for key in task_seqs {
                 let mut task_item = tasks_batch_in_second.tasks.remove(&key).unwrap();
-                let task = task_item.task.take().unwrap();
-                factory.error_handle(task, RpcIntErr::IO);
+                let mut task = task_item.task.take().unwrap();
+                task.set_rpc_error(RpcIntErr::IO);
+                factory.error_handle(task);
             }
         }
     }
@@ -203,8 +205,8 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
             if !real_timeout.tasks.is_empty() {
                 let mut min_seq = 0;
                 for (_seq, mut task_item) in real_timeout.tasks {
-                    let _task = task_item.task.take().unwrap();
-                    let seq = _task.seq();
+                    let mut task = task_item.task.take().unwrap();
+                    let seq = task.seq();
                     if min_seq == 0 {
                         min_seq = seq;
                     } else {
@@ -214,9 +216,10 @@ impl<F: ClientFactory> ClientTaskTimer<F> {
                     }
                     warn!(
                         "task {:?} is timeout on client={}:{}",
-                        _task, self.server_id, self.client_id
+                        task, self.server_id, self.client_id
                     );
-                    factory.error_handle(_task, RpcIntErr::Timeout);
+                    task.set_rpc_error(RpcIntErr::Timeout);
+                    factory.error_handle(task);
                 }
                 self.min_delay_seq = min_seq;
             }

@@ -65,8 +65,9 @@ pub trait ClientFactory: Send + Sync + Sized + 'static {
     /// How to deal with error
     ///
     /// You can overwrite this to implement retry logic
-    fn error_handle<E: Into<EncodedErr>>(&self, task: Self::Task, err: E) {
-        task.set_result(Err(err.into()));
+    #[inline(always)]
+    fn error_handle(&self, task: Self::Task) {
+        task.done();
     }
 
     /// You can overwrite this to assign a client_id
@@ -149,14 +150,26 @@ pub trait ClientTaskDecode {
     }
 }
 
-/// How to notify from Rpc framework to user when a task is done
-pub trait ClientTaskDone: Sized + 'static {
+/// client_task_enum should impl this for user, not used by framework
+pub trait ClientTaskGetResult<E: RpcErrCodec> {
     /// Check the result of the task
-    fn get_result<E: RpcErrCodec>(&self) -> Result<(), &RpcError<E>>;
+    fn get_result(&self) -> Result<(), &RpcError<E>>;
+}
 
-    /// Set the result and notify outside the task is done.
+/// How to notify from Rpc framework to user when a task is done
+///
+/// The rpc framework first call set_ok or set_xxx_error, then call done
+pub trait ClientTaskDone: Sized + 'static {
+    /// Set the result.
     /// Called by RPC framework
-    fn set_result(self, res: Result<(), EncodedErr>);
+    fn set_custom_error<C: Codec>(&mut self, codec: &C, res: EncodedErr);
+
+    /// Called by RPC framework
+    fn set_rpc_error(&mut self, e: RpcIntErr);
+
+    fn set_ok(&mut self);
+
+    fn done(self);
 }
 
 /// Get RpcAction from a enum task, or a sub-type that fits multiple RpcActions

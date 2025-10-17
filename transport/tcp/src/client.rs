@@ -71,18 +71,14 @@ impl<F: ClientFactory> TcpClient<F> {
 
     #[inline]
     async fn _recv_error(
-        &self, factory: &F, resp_head: &proto::RespHead, task: F::Task,
+        &self, factory: &F, codec: &F::Codec, resp_head: &proto::RespHead, mut task: F::Task,
     ) -> io::Result<()> {
         log_debug_assert!(resp_head.flag > 0);
         let reader = self.get_stream_mut();
         match resp_head.flag {
             1 => {
-                let rpc_err = EncodedErr::Num(resp_head.msg_len as i32);
-                //if self.should_close(err_no) {
-                //    (self, task, rpc_err);
-                //    return Err(RpcIntErr::IO.into());
-                //} else {
-                factory.error_handle(task, rpc_err);
+                task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len as i32));
+                factory.error_handle(task);
                 return Ok(());
             }
             2 => {
@@ -90,7 +86,8 @@ impl<F: ClientFactory> TcpClient<F> {
                 match io_with_timeout!(F::IO, self.read_timeout, reader.read_exact(buf)) {
                     Err(e) => {
                         logger_warn!(self.logger, "{:?} recv buffer error: {}", self, e);
-                        factory.error_handle(task, RpcIntErr::IO);
+                        task.set_rpc_error(RpcIntErr::IO);
+                        factory.error_handle(task);
                         return Err(e);
                     }
                     Ok(_) => {
@@ -98,12 +95,14 @@ impl<F: ClientFactory> TcpClient<F> {
                         if buf.starts_with(RPC_ERR_PREFIX.as_bytes()) {
                             if let Ok(s) = str::from_utf8(buf) {
                                 if let Ok(e) = RpcIntErr::from_str(s) {
-                                    factory.error_handle(task, e);
+                                    task.set_rpc_error(e);
+                                    factory.error_handle(task);
                                     return Ok(());
                                 }
                             }
                         }
-                        factory.error_handle(task, EncodedErr::Buf(buf.clone()));
+                        task.set_custom_error(codec, EncodedErr::Buf(buf.clone()));
+                        factory.error_handle(task);
                         return Ok(());
                     }
                 }
@@ -124,11 +123,12 @@ impl<F: ClientFactory> TcpClient<F> {
         if let Some(mut task_item) = task_reg.take_task(resp_head.seq).await {
             let mut task = task_item.task.take().unwrap();
             if resp_head.flag > 0 {
-                return self._recv_error(factory, resp_head, task).await;
+                return self._recv_error(factory, codec, resp_head, task).await;
             }
             if resp_head.msg_len > 0 {
                 if let Err(e) = io_with_timeout!(F::IO, read_timeout, reader.read_exact(read_buf)) {
-                    factory.error_handle(task, RpcIntErr::IO);
+                    task.set_rpc_error(RpcIntErr::IO);
+                    factory.error_handle(task);
                     return Err(e);
                 }
             } // When msg_len == 0, read_buf has 0 size
@@ -142,7 +142,8 @@ impl<F: ClientFactory> TcpClient<F> {
                             self,
                             task,
                         );
-                        task.set_result(Err(RpcIntErr::Decode.into()));
+                        task.set_rpc_error(RpcIntErr::Decode);
+                        factory.error_handle(task);
                         return self._recv_and_dump(blob_len as usize).await;
                     }
                     Some(buf) => {
@@ -156,7 +157,8 @@ impl<F: ClientFactory> TcpClient<F> {
                                 self,
                                 e
                             );
-                            factory.error_handle(task, RpcIntErr::IO);
+                            task.set_rpc_error(RpcIntErr::IO);
+                            factory.error_handle(task);
                             return Err(e);
                         }
                     }
@@ -167,12 +169,13 @@ impl<F: ClientFactory> TcpClient<F> {
                 // set result of task, and notify task completed
                 if let Err(_) = task.decode_resp(codec, read_buf) {
                     logger_warn!(self.logger, "{:?} rpc client reader decode resp err", self,);
-                    task.set_result(Err(RpcIntErr::Decode.into()));
+                    task.set_rpc_error(RpcIntErr::Decode);
+                    factory.error_handle(task);
                 } else {
-                    task.set_result(Ok(()));
+                    task.set_ok();
                 }
             } else {
-                task.set_result(Ok(()));
+                task.set_ok();
             }
             return Ok(());
         } else {

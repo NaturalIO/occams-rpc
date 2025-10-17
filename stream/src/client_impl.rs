@@ -265,7 +265,8 @@ impl<F: ClientFactory> RpcClientInner<F> {
                 task,
                 RpcIntErr::IO,
             );
-            self.factory.error_handle(task, RpcIntErr::IO);
+            task.set_rpc_error(RpcIntErr::IO);
+            self.factory.error_handle(task);
             timer.pending_task_count_ref().fetch_sub(1, Ordering::SeqCst); // rollback
             return Err(RpcIntErr::IO);
         }
@@ -273,8 +274,10 @@ impl<F: ClientFactory> RpcClientInner<F> {
         match self.send_request(&mut task, need_flush).await {
             Err(e) => {
                 logger_warn!(self.logger(), "{:?} sending task {:?} err: {}", self, task, e);
-                timer.pending_task_count_ref().fetch_sub(1, Ordering::SeqCst); // rollback
-                self.factory.error_handle(task, e);
+                // rollback counter
+                timer.pending_task_count_ref().fetch_sub(1, Ordering::SeqCst);
+                task.set_rpc_error(e);
+                self.factory.error_handle(task);
                 self.closed.store(true, Ordering::SeqCst);
                 self.has_err.store(true, Ordering::SeqCst);
                 timer.stop_reg_task();
@@ -400,7 +403,8 @@ impl<F: ClientFactory> RpcClientInner<F> {
                 if timer.check_pending_tasks_empty() || self.has_err.load(Ordering::Relaxed) {
                     return Err(RpcIntErr::IO);
                 }
-                if let Err(e) = self.conn.read_resp(&self.factory, &self.codec, None, timer).await {
+                if let Err(_e) = self.conn.read_resp(&self.factory, &self.codec, None, timer).await
+                {
                     self.closed.store(true, Ordering::SeqCst);
                     return Err(RpcIntErr::IO);
                 }
@@ -411,7 +415,7 @@ impl<F: ClientFactory> RpcClientInner<F> {
                     .read_resp(&self.factory, &self.codec, Some(&self.close_rx), timer)
                     .await
                 {
-                    Err(e) => {
+                    Err(_e) => {
                         return Err(RpcIntErr::IO);
                     }
                     Ok(r) => {

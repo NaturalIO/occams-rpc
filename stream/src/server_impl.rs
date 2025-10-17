@@ -329,7 +329,7 @@ where
 
     #[inline]
     fn encode_resp(
-        &self, mut task: R::ChannelItem,
+        &self, task: R::ChannelItem,
     ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         R::encode_resp::<C>(&self.codec, task)
     }
@@ -343,7 +343,7 @@ impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
 
     #[inline]
     fn encode_resp<C: Codec>(
-        codec: &C, mut task: Self::ChannelItem,
+        codec: &C, task: Self::ChannelItem,
     ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
         task.encode_resp(codec)
     }
