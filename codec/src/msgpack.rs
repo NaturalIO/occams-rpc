@@ -16,6 +16,17 @@ impl Codec for MsgpCodec {
         }
     }
 
+    /// sererialized the msg into buf (with std::io::Writer), and return the size written
+    fn encode_into<T: Serialize>(&self, task: &T, buf: &mut Vec<u8>) -> Result<usize, ()> {
+        let pre_len = buf.len();
+        if let Err(e) = rmp_serde::encode::write_named(buf, task) {
+            log::error!("encode error: {:?}", e);
+            return Err(());
+        } else {
+            Ok(buf.len() - pre_len)
+        }
+    }
+
     #[inline(always)]
     fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()> {
         match rmp_serde::decode::from_slice::<T>(buf) {

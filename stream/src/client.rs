@@ -99,8 +99,7 @@ pub trait ClientTransport<F: ClientFactory>: fmt::Debug + Send + Sized + 'static
 
     /// Write out the encoded request task
     fn write_req<'a>(
-        &'a self, need_flush: bool, header: &'a [u8], action_str: Option<&'a [u8]>,
-        msg_buf: &'a [u8], blob: Option<&'a [u8]>,
+        &'a self, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Read the response and decode it from the socket, find and notify the registered ClientTask
@@ -127,8 +126,8 @@ pub trait ClientTask:
 
 /// Encode the request to buffer that can be send to server
 pub trait ClientTaskEncode {
-    /// Return a sererialized msg of the request.
-    fn encode_req<C: Codec>(&self, codec: &C) -> Result<Vec<u8>, ()>;
+    /// sererialized the msg into buf (with std::io::Writer), and return the size written
+    fn encode_req<C: Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()>;
 
     /// Contain optional extra data to send to server side.
     ///

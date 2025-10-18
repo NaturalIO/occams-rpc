@@ -13,6 +13,7 @@ use std::{
     cell::UnsafeCell,
     fmt,
     future::Future,
+    mem::transmute,
     pin::Pin,
     sync::{
         Arc,
@@ -28,7 +29,6 @@ use futures::pin_mut;
 use occams_rpc_core::{error::*, runtime::*};
 use std::time::Duration;
 use sync_utils::{time::DelayedTime, waitgroup::WaitGroupGuard};
-use zerocopy::AsBytes;
 
 /// RpcClient represents a client-side connection.
 ///
@@ -183,6 +183,7 @@ struct RpcClientInner<F: ClientFactory> {
     has_err: AtomicBool,
     throttler: Option<Throttler>,
     last_resp_ts: Option<Arc<AtomicU64>>,
+    encode_buf: UnsafeCell<Vec<u8>>,
     codec: F::Codec,
     factory: Arc<F>,
 }
@@ -216,6 +217,7 @@ impl<F: ClientFactory> RpcClientInner<F> {
                 config.task_timeout,
                 thresholds,
             )),
+            encode_buf: UnsafeCell::new(Vec::with_capacity(1024)),
             throttler: None,
             last_resp_ts,
             has_err: AtomicBool::new(false),
@@ -244,14 +246,13 @@ impl<F: ClientFactory> RpcClientInner<F> {
 
     #[inline(always)]
     fn get_timer_mut(&self) -> &mut ClientTaskTimer<F> {
-        unsafe { std::mem::transmute(self.timer.get()) }
+        unsafe { transmute(self.timer.get()) }
     }
 
-    //    #[inline(always)]
-    //    fn should_close(&self, e: Errno) -> bool {
-    //          TODO replace this
-    //        e == Errno::EAGAIN || e == Errno::EHOSTDOWN
-    //    }
+    #[inline(always)]
+    fn get_encoded_buf(&self) -> &mut Vec<u8> {
+        unsafe { transmute(self.encode_buf.get()) }
+    }
 
     /// Directly work on the socket steam, when failed
     async fn send_task(&self, mut task: F::Task, need_flush: bool) -> Result<(), RpcIntErr> {
@@ -313,18 +314,14 @@ impl<F: ClientFactory> RpcClientInner<F> {
     async fn send_request(&self, task: &mut F::Task, need_flush: bool) -> Result<(), RpcIntErr> {
         let seq = self.seq_update();
         task.set_seq(seq);
-        match proto::ReqHead::encode(&self.codec, self.client_id, task) {
+        let buf = self.get_encoded_buf();
+        match proto::ReqHead::encode(&self.codec, buf, self.client_id, task) {
             Err(_) => {
                 logger_warn!(self.logger(), "{:?} send_req encode req {:?} err", self, task);
                 return Err(RpcIntErr::Encode);
             }
-            Ok((header, action_str, msg_buf, blob_buf)) => {
-                let header_bytes = header.as_bytes();
-                if let Err(e) = self
-                    .conn
-                    .write_req(need_flush, header_bytes, action_str, msg_buf.as_bytes(), blob_buf)
-                    .await
-                {
+            Ok(blob_buf) => {
+                if let Err(e) = self.conn.write_req(buf, blob_buf, need_flush).await {
                     logger_warn!(
                         self.logger(),
                         "{:?} send_req write req {:?} err: {:?}",
@@ -350,20 +347,11 @@ impl<F: ClientFactory> RpcClientInner<F> {
             logger_warn!(self.logger(), "{:?} send_ping_req skip as conn closed", self);
             return Err(RpcIntErr::IO);
         }
-        // encode response header
-        let header = proto::ReqHead {
-            magic: proto::RPC_MAGIC,
-            seq: self.seq_update(),
-            client_id: self.client_id,
-            ver: 1,
-            format: 0,
-            action: proto::PING_ACTION,
-            msg_len: 0 as u32,
-            blob_len: 0 as u32,
-        };
+        let buf = self.get_encoded_buf();
+        proto::ReqHead::encode_ping(buf, self.client_id, self.seq_update());
         // Ping does not need to reg_task, and have no error_handle, just to keep the connection
         // alive. Connection Prober can monitor the liveness of ClientConn
-        if let Err(e) = self.conn.write_req(true, header.as_bytes(), None, b"", None).await {
+        if let Err(e) = self.conn.write_req(buf, None, true).await {
             logger_warn!(self.logger(), "{:?} send ping err: {:?}", self, e);
             self.closed.store(true, Ordering::SeqCst);
             return Err(RpcIntErr::IO);

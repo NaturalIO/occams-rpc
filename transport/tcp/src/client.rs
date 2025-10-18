@@ -77,12 +77,12 @@ impl<F: ClientFactory> TcpClient<F> {
         let reader = self.get_stream_mut();
         match resp_head.flag {
             1 => {
-                task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len as i32));
+                task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len.get() as i32));
                 factory.error_handle(task);
                 return Ok(());
             }
             2 => {
-                let buf = self.get_resp_buf(resp_head.blob_len as usize);
+                let buf = self.get_resp_buf(resp_head.blob_len.get() as usize);
                 match io_with_timeout!(F::IO, self.read_timeout, reader.read_exact(buf)) {
                     Err(e) => {
                         logger_warn!(self.logger, "{:?} recv buffer error: {}", self, e);
@@ -118,9 +118,9 @@ impl<F: ClientFactory> TcpClient<F> {
     ) -> io::Result<()> {
         let reader = self.get_stream_mut();
         let read_timeout = self.read_timeout;
-        let blob_len = resp_head.blob_len;
-        let read_buf = self.get_resp_buf(resp_head.msg_len as usize);
-        if let Some(mut task_item) = task_reg.take_task(resp_head.seq).await {
+        let blob_len = resp_head.blob_len.get();
+        let read_buf = self.get_resp_buf(resp_head.msg_len.get() as usize);
+        if let Some(mut task_item) = task_reg.take_task(resp_head.seq.get()).await {
             let mut task = task_item.task.take().unwrap();
             if resp_head.flag > 0 {
                 return self._recv_error(factory, codec, resp_head, task).await;
@@ -185,9 +185,9 @@ impl<F: ClientFactory> TcpClient<F> {
             logger_trace!(self.logger, "{:?} timer take_task(seq={}) return None", self, seq);
             let mut data_len = 0;
             if resp_head.flag == 0 {
-                data_len += resp_head.msg_len + resp_head.blob_len as u32;
+                data_len += resp_head.msg_len.get() + resp_head.blob_len.get() as u32;
             } else if resp_head.flag == proto::RESP_FLAG_HAS_ERR_STRING {
-                data_len += resp_head.blob_len as u32;
+                data_len += resp_head.blob_len.get() as u32;
             }
             if data_len > 0 {
                 return self._recv_and_dump(data_len as usize).await;
@@ -271,8 +271,7 @@ impl<F: ClientFactory> ClientTransport<F> for TcpClient<F> {
 
     #[inline(always)]
     async fn write_req<'a>(
-        &'a self, need_flush: bool, header: &'a [u8], action_str: Option<&'a [u8]>,
-        msg_buf: &'a [u8], blob: Option<&'a [u8]>,
+        &'a self, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
         let write_timeout = self.write_timeout;
@@ -285,13 +284,7 @@ impl<F: ClientFactory> ClientTransport<F> for TcpClient<F> {
                 }
             }};
         }
-        io_with_timeout!(F::IO, write_timeout, writer.write_all(header))?;
-        if let Some(action_s) = action_str {
-            err_log!(io_with_timeout!(F::IO, write_timeout, writer.write_all(action_s)));
-        }
-        if msg_buf.len() > 0 {
-            err_log!(io_with_timeout!(F::IO, write_timeout, writer.write_all(msg_buf)));
-        }
+        io_with_timeout!(F::IO, write_timeout, writer.write_all(buf))?;
         if let Some(blob_buf) = blob {
             err_log!(io_with_timeout!(F::IO, write_timeout, writer.write_all(blob_buf)));
         }

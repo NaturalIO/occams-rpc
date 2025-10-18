@@ -10,7 +10,6 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, io};
-use zerocopy::AsBytes;
 
 pub const SERVER_DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
@@ -137,7 +136,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
         };
 
         let msg_buf = self.get_msg_buf();
-        msg_buf.resize(rpc_head.msg_len as usize, 0);
+        msg_buf.resize(rpc_head.msg_len.get() as usize, 0);
         if rpc_head.msg_len > 0 {
             if let Err(e) = io_with_timeout!(F::IO, read_timeout, reader.read_exact(msg_buf)) {
                 logger_trace!(self.logger, "{:?}: read req msg error: {:?}", self, e);
@@ -145,8 +144,9 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
             }
         }
         let mut blob: Option<Buffer> = None;
-        if rpc_head.blob_len > 0 {
-            match Buffer::alloc(rpc_head.blob_len as i32) {
+        let blob_len = rpc_head.blob_len.get() as i32;
+        if blob_len > 0 {
+            match Buffer::alloc(blob_len) {
                 Err(_) => return Err(RpcIntErr::Decode),
                 Ok(mut ext_buf) => {
                     match io_with_timeout!(F::IO, read_timeout, reader.read_exact(&mut ext_buf)) {
@@ -166,7 +166,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                 }
             }
         }
-        return Ok(RpcSvrReq::<'a> { seq: rpc_head.seq, action, msg: msg_buf, blob });
+        return Ok(RpcSvrReq::<'a> { seq: rpc_head.seq.get(), action, msg: msg_buf, blob });
     }
 
     #[inline]
@@ -207,7 +207,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                 }
                 if msg.len() > 0 {
                     if let Err(e) =
-                        io_with_timeout!(F::IO, write_timeout, writer.write_all(msg.as_bytes()))
+                        io_with_timeout!(F::IO, write_timeout, writer.write_all(msg.as_ref()))
                     {
                         logger_debug!(
                             self.logger,
@@ -220,7 +220,7 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
                 }
                 if let Some(blob) = blob_buf.as_ref() {
                     if let Err(e) =
-                        io_with_timeout!(F::IO, write_timeout, writer.write_all(blob.as_bytes()))
+                        io_with_timeout!(F::IO, write_timeout, writer.write_all(blob.as_ref()))
                     {
                         logger_debug!(
                             self.logger,

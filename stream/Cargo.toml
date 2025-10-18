@@ -21,7 +21,7 @@ occams-rpc-stream-macros = {path="macros", version="0"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
 futures = "0.3"
-zerocopy = "0.2"
+zerocopy = { version="0.8", features=["derive"]}
 io-buffer = "1"
 rustc-hash = "1.1"
 sync-utils = "0"
