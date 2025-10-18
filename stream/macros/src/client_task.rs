@@ -436,8 +436,8 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #impl_generics_for_impl occams_rpc_stream::client::ClientTaskEncode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
-            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()> {
-                codec.encode(&self.#req_field_name)
+            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
+                codec.encode_into(&self.#req_field_name, buf)
             }
 
             #get_req_blob_body

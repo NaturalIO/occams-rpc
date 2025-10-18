@@ -78,7 +78,8 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
         let write_task = FileClientTaskWrite::new(tx.clone(), 1, 0, write_data.clone());
         let mut task: FileClientTask = write_task.into();
         let codec = MsgpCodec::default();
-        let req_buf = task.encode_req(&codec).expect("encode");
+        let mut req_buf = Vec::new();
+        task.encode_req(&codec, &mut req_buf).expect("encode");
         let req_size = req_buf.len() + RPC_REQ_HEADER_LEN + data_len as usize;
         task.set_ok();
         task.done();

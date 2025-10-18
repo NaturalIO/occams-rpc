@@ -129,7 +129,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
         get_action_arms.push(action_arm);
 
         encode_req_arms.push(quote! {
-            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskEncode::encode_req(inner, codec),
+            #enum_name::#variant_name(inner) => occams_rpc_stream::client::ClientTaskEncode::encode_req(inner, codec, buf),
         });
 
         get_req_blob_arms.push(quote! {
@@ -195,7 +195,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics occams_rpc_stream::client::ClientTaskEncode for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()> {
+            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
                 match self {
                     #(#encode_req_arms)*
                 }

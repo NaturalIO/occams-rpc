@@ -123,7 +123,8 @@ fn test_client_task_enum_delegation() {
 
     // Test ClientTaskEncode/Decode delegation
     let codec = MsgpCodec::default();
-    let msg_buf = enum_task_b.encode_req(&codec).expect("encode_req ok");
+    let mut msg_buf = Vec::new();
+    enum_task_b.encode_req(&codec, &mut msg_buf).expect("encode_req ok");
 
     if let MyTask::B(t) = &mut enum_task_b {
         t.resp = None;
