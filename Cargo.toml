@@ -28,13 +28,13 @@ occams-rpc-stream = {path="stream/", version="0"}
 occams-rpc-api-macros = { path = "macros", version = "0" }
 async-trait = "0"
 rustc-hash = "2"
+crossfire = "2.1"
 
 [features]
 default = []
 
 [dev-dependencies]
 serde_derive = "1"
-crossfire = "2.1"
 
 [package.metadata.docs.rs]
 all-features = true

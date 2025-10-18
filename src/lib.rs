@@ -23,4 +23,5 @@
 //! - transports:
 //!   - [`occams-rpc-tcp`](https://docs.rs/occams-rpc-tcp): A TCP transport implementation.
 
+pub mod client;
 pub mod service;
