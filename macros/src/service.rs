@@ -160,7 +160,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #(#handler_methods)*
                 }
 
-                impl #service_trait_impl_generics ServiceTrait<C> for #self_ty #service_trait_where_clause {
+                impl #service_trait_impl_generics occams_rpc::service::ServiceStatic<C> for #self_ty #service_trait_where_clause {
                     const SERVICE_NAME: &'static str = #service_name_pascal;
                     fn serve(&self, req: Request<C>) -> impl std::future::Future<Output = ()> + Send {
                         async move {

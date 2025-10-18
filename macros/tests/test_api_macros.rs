@@ -1,4 +1,4 @@
-use occams_rpc::server::ServiceTrait;
+use occams_rpc::service::ServiceStatic;
 use occams_rpc_codec::MsgpCodec;
 use occams_rpc_core::{
     error::{EncodedErr, RpcIntErr},
@@ -13,7 +13,7 @@ use common::*;
 #[tokio::test]
 async fn test_multi_error_service() {
     assert_eq!(
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME,
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME,
         "MultiErrorServiceImpl"
     );
     let service_impl = MultiErrorServiceImpl;
@@ -24,12 +24,12 @@ async fn test_multi_error_service() {
     // Test success case
     let req = create_mock_request(
         1,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "success_method".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
@@ -39,12 +39,12 @@ async fn test_multi_error_service() {
     // Test string error
     let req = create_mock_request(
         2,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "string_error".to_string(),
         &MyArg { value: 0 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
     assert_eq!(resp.res.unwrap_err(), EncodedErr::Buf("string error".to_string().into_bytes()));
@@ -52,12 +52,12 @@ async fn test_multi_error_service() {
     // Test i32 error
     let req = create_mock_request(
         3,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "i32_error".to_string(),
         &MyArg { value: 0 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 3);
     assert_eq!(resp.res.unwrap_err(), EncodedErr::Num(42));
@@ -65,12 +65,12 @@ async fn test_multi_error_service() {
     // Test errno error
     let req = create_mock_request(
         4,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "errno_error".to_string(),
         &MyArg { value: 0 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 4);
     assert_eq!(resp.res.unwrap_err(), EncodedErr::Num(nix::errno::Errno::EPERM as i32));
@@ -78,12 +78,12 @@ async fn test_multi_error_service() {
     // Test unknown method
     let req = create_mock_request(
         5,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "unknown_method".to_string(),
         &MyArg { value: 0 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 5);
     assert_eq!(resp.res.unwrap_err(), EncodedErr::Rpc(RpcIntErr::Method));
@@ -91,7 +91,7 @@ async fn test_multi_error_service() {
 
 #[tokio::test]
 async fn test_impl_future_service() {
-    assert_eq!(<ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME, "ImplFutureService");
+    assert_eq!(<ImplFutureService as ServiceStatic<MsgpCodec>>::SERVICE_NAME, "ImplFutureService");
     let service_impl = ImplFutureService;
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();
@@ -99,12 +99,12 @@ async fn test_impl_future_service() {
 
     let req = create_mock_request(
         1,
-        <ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <ImplFutureService as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "add".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
@@ -115,7 +115,7 @@ async fn test_impl_future_service() {
 #[tokio::test]
 async fn test_async_trait_service() {
     assert_eq!(
-        <MyAsyncTraitServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME,
+        <MyAsyncTraitServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME,
         "MyAsyncTraitService"
     );
     let service_impl = MyAsyncTraitServiceImpl;
@@ -125,12 +125,12 @@ async fn test_async_trait_service() {
 
     let req = create_mock_request(
         1,
-        <MyAsyncTraitServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MyAsyncTraitServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "mul".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
-    ServiceTrait::serve(&service_impl, req).await;
+    ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
@@ -151,12 +151,12 @@ async fn test_service_mux_struct() {
     // Test routing to the 'multi' service
     let req = create_mock_request(
         1,
-        <MultiErrorServiceImpl as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "success_method".to_string(),
         &MyArg { value: 10 },
         noti.clone(),
     );
-    ServiceTrait::serve(&services, req).await;
+    ServiceStatic::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.is_ok());
@@ -166,12 +166,12 @@ async fn test_service_mux_struct() {
     // Test routing to the 'impl_future' service
     let req = create_mock_request(
         2,
-        <ImplFutureService as ServiceTrait<MsgpCodec>>::SERVICE_NAME.to_string(),
+        <ImplFutureService as ServiceStatic<MsgpCodec>>::SERVICE_NAME.to_string(),
         "add".to_string(),
         &MyArg { value: 20 },
         noti.clone(),
     );
-    ServiceTrait::serve(&services, req).await;
+    ServiceStatic::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
     assert!(resp.res.is_ok());
@@ -186,7 +186,7 @@ async fn test_service_mux_struct() {
         &MyArg { value: 30 },
         noti.clone(),
     );
-    ServiceTrait::serve(&services, req).await;
+    ServiceStatic::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 3);
     assert_eq!(resp.res.unwrap_err(), EncodedErr::Rpc(RpcIntErr::Service));

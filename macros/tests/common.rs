@@ -1,4 +1,4 @@
-use occams_rpc::server::{Request, Response, ServiceTrait};
+use occams_rpc::service::{Request, Response};
 use occams_rpc_api_macros::{method, service, service_mux_struct};
 use occams_rpc_codec::MsgpCodec;
 use occams_rpc_core::{error::RpcError, Codec};
