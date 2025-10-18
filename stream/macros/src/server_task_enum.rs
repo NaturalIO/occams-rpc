@@ -203,7 +203,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
         }
         if has_resp {
             encode_arms.push(quote! {
-                #enum_name::#variant_name(task) => task.encode_resp(codec),
+                #enum_name::#variant_name(task) => task.encode_resp(codec, buf),
             });
 
             set_result_arms.push(quote! {
@@ -248,10 +248,11 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
             impl #impl_generics occams_rpc_stream::server::ServerTaskEncode for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn encode_resp<C: occams_rpc_core::Codec>(
-                    self,
+                fn encode_resp<'a, 'b, C: occams_rpc_core::Codec>(
+                    &'a mut self,
                     codec: &C,
-                ) -> (u64, Result<(Vec<u8>, Option<io_buffer::Buffer>), occams_rpc_core::error::EncodedErr>) {
+                    buf: &'b mut Vec<u8>,
+                ) -> (u64, Result<(usize, Option<&'a [u8]>), occams_rpc_core::error::EncodedErr>) {
                     match self {
                         #(#encode_arms)*
                     }

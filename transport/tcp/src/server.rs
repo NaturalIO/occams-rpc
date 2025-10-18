@@ -1,12 +1,13 @@
 use occams_rpc_core::io::{AsyncBufStream, AsyncRead, AsyncWrite, Cancellable, io_with_timeout};
 use occams_rpc_core::runtime::AsyncIO;
-use occams_rpc_core::{ServerConfig, error::*};
-use occams_rpc_stream::server::{RpcSvrReq, ServerFactory, ServerTransport};
+use occams_rpc_core::{Codec, ServerConfig, error::*};
+use occams_rpc_stream::server::{RpcSvrReq, ServerFactory, ServerTaskEncode, ServerTransport};
 use occams_rpc_stream::{proto, proto::RpcAction};
 
 use crate::net::{UnifyListener, UnifyStream};
 use io_buffer::Buffer;
 use std::cell::UnsafeCell;
+use std::mem::transmute;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, io};
@@ -17,8 +18,12 @@ pub struct TcpServer<F: ServerFactory> {
     stream: UnsafeCell<AsyncBufStream<UnifyStream<F::IO>>>,
     _conn_count: Arc<()>,
     config: ServerConfig,
+    /// for read
     action_buf: UnsafeCell<Vec<u8>>,
+    /// for read
     msg_buf: UnsafeCell<Vec<u8>>,
+    /// for write
+    encode_buf: UnsafeCell<Vec<u8>>,
     logger: F::Logger,
 }
 
@@ -31,17 +36,22 @@ impl<F: ServerFactory> TcpServer<F> {
     // we use unsafe to achieve such goal,
     #[inline(always)]
     fn get_stream_mut(&self) -> &mut AsyncBufStream<UnifyStream<F::IO>> {
-        unsafe { std::mem::transmute(self.stream.get()) }
+        unsafe { transmute(self.stream.get()) }
     }
 
     #[inline(always)]
     fn get_msg_buf(&self) -> &mut Vec<u8> {
-        unsafe { std::mem::transmute(self.msg_buf.get()) }
+        unsafe { transmute(self.msg_buf.get()) }
     }
 
     #[inline(always)]
     fn get_action_buf(&self) -> &mut Vec<u8> {
-        unsafe { std::mem::transmute(self.action_buf.get()) }
+        unsafe { transmute(self.action_buf.get()) }
+    }
+
+    #[inline(always)]
+    fn get_encode_buf(&self) -> &mut Vec<u8> {
+        unsafe { transmute(self.encode_buf.get()) }
     }
 }
 
@@ -66,6 +76,8 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
             config: config.clone(),
             action_buf: UnsafeCell::new(Vec::with_capacity(128)),
             msg_buf: UnsafeCell::new(Vec::with_capacity(512)),
+            // TODO add const assert with RPC_RESP_HEADER_LEN
+            encode_buf: UnsafeCell::new(Vec::with_capacity(512)),
             _conn_count: conn_count,
             logger,
         }
@@ -170,70 +182,57 @@ impl<F: ServerFactory> ServerTransport<F> for TcpServer<F> {
     }
 
     #[inline]
-    async fn write_resp(
-        &self, seq: u64, res: Result<(Vec<u8>, Option<Buffer>), EncodedErr>,
+    async fn write_resp<C: Codec, T: ServerTaskEncode>(
+        &self, codec: &C, mut task: T,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
         let write_timeout = self.config.write_timeout;
-        match res {
-            Err(e) => {
-                let (header, err_str) = proto::RespHead::encode_err(seq, &e);
-                if let Err(e) =
-                    io_with_timeout!(F::IO, write_timeout, writer.write_all(header.as_bytes()))
-                {
-                    logger_warn!(self.logger, "{:?}: send_resp write resp header err: {}", self, e);
-                    return Err(e);
-                }
-                if let Some(s) = err_str.as_ref() {
-                    if let Err(e) = io_with_timeout!(F::IO, write_timeout, writer.write_all(s)) {
-                        logger_debug!(
-                            self.logger,
-                            "{:?}: send_resp write resp blob err: {}",
-                            self,
-                            e
-                        );
-                        return Err(e);
-                    }
-                }
-                logger_trace!(self.logger, "{:?}: send resp: {}", self, header);
-            }
-            Ok((msg, blob_buf)) => {
-                let header = proto::RespHead::encode_msg(seq, &msg, blob_buf.as_ref());
-                if let Err(e) =
-                    io_with_timeout!(F::IO, write_timeout, writer.write_all(header.as_bytes()))
-                {
-                    logger_warn!(self.logger, "{:?}: send_resp write resp header err: {}", self, e);
-                    return Err(e);
-                }
-                if msg.len() > 0 {
-                    if let Err(e) =
-                        io_with_timeout!(F::IO, write_timeout, writer.write_all(msg.as_ref()))
-                    {
-                        logger_debug!(
-                            self.logger,
-                            "{:?}: send_resp write resp msg err: {}",
-                            self,
-                            e
-                        );
-                        return Err(e);
-                    }
-                }
-                if let Some(blob) = blob_buf.as_ref() {
-                    if let Err(e) =
-                        io_with_timeout!(F::IO, write_timeout, writer.write_all(blob.as_ref()))
-                    {
-                        logger_debug!(
-                            self.logger,
-                            "{:?}: send_resp write resp blob err: {}",
-                            self,
-                            e
-                        );
-                        return Err(e);
-                    }
-                }
-                logger_trace!(self.logger, "{:?}: send resp: {}", self, header);
+        let buf = self.get_encode_buf();
+        let (seq, blob_buf) = proto::RespHead::encode(&self.logger, codec, buf, &mut task);
+        if let Err(e) = io_with_timeout!(F::IO, write_timeout, writer.write_all(buf)) {
+            logger_warn!(
+                self.logger,
+                "{:?}: send_resp write resp seq={} msg err: {}",
+                self,
+                seq,
+                e
+            );
+            return Err(e);
+        }
+        if let Some(blob) = blob_buf {
+            if let Err(e) = io_with_timeout!(F::IO, write_timeout, writer.write_all(blob.as_ref()))
+            {
+                logger_debug!(
+                    self.logger,
+                    "{:?}: send_resp write resp seq={} blob err: {}",
+                    self,
+                    seq,
+                    e
+                );
+                return Err(e);
             }
         }
+        logger_trace!(self.logger, "{:?}: send resp seq={}", self, seq);
+        return Ok(());
+    }
+
+    #[inline(always)]
+    async fn write_resp_internal(&self, seq: u64, err: Option<RpcIntErr>) -> io::Result<()> {
+        let writer = self.get_stream_mut();
+        let write_timeout = self.config.write_timeout;
+        let buf = self.get_encode_buf();
+        let seq = proto::RespHead::encode_internal(&self.logger, buf, seq, err);
+        if let Err(e) = io_with_timeout!(F::IO, write_timeout, writer.write_all(buf)) {
+            logger_warn!(
+                self.logger,
+                "{:?}: send_resp write resp seq={} msg err: {}",
+                self,
+                seq,
+                e
+            );
+            return Err(e);
+        }
+        logger_trace!(self.logger, "{:?}: send resp seq={}", self, seq);
         return Ok(());
     }
 

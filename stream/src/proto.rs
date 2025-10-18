@@ -38,7 +38,7 @@
 //! - `blob_len`
 ///
 use crate::client::ClientTask;
-use io_buffer::Buffer;
+use crate::server::ServerTaskEncode;
 use occams_rpc_core::{Codec, error::*};
 use std::fmt;
 use std::io::Write;
@@ -245,61 +245,116 @@ pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
 
 impl RespHead {
     #[inline]
-    pub fn encode_err<'a>(seq: u64, err: &'a EncodedErr) -> (Self, Option<&'a [u8]>) {
-        let error_str: &[u8];
-        match err {
-            EncodedErr::Num(n) => {
-                let header = RespHead {
-                    magic: RPC_MAGIC,
-                    ver: RPC_VERSION_1,
-                    flag: RESP_FLAG_HAS_ERRNO,
-                    seq: little_endian::U64::new(seq),
-                    msg_len: little_endian::U32::new(*n as u32),
-                    blob_len: little_endian::I32::ZERO,
-                };
-                return (header, None);
+    pub fn encode<'a, 'b, L, C, T>(
+        logger: &'b L, codec: &'b C, buf: &'b mut Vec<u8>, task: &'a mut T,
+    ) -> (u64, Option<&'a [u8]>)
+    where
+        L: captains_log::filter::Filter,
+        C: Codec,
+        T: ServerTaskEncode,
+    {
+        debug_assert!(buf.capacity() >= RPC_RESP_HEADER_LEN);
+        // Leave a room at the begining of buffer for RespHead
+        unsafe { buf.set_len(RPC_RESP_HEADER_LEN) };
+        let (seq, r) = task.encode_resp(codec, buf);
+        match r {
+            Ok((msg_len, None)) => {
+                if msg_len > u32::MAX as usize {
+                    error!("write_resp: encoded msg len {} exceed u32 limit", msg_len);
+                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
+                } else {
+                    Self::_write_head(logger, buf, 0, seq, msg_len as u32, 0);
+                }
+                return (seq, None);
             }
-            EncodedErr::Rpc(s) => {
-                error_str = s.as_bytes();
+            Ok((msg_len, Some(blob))) => {
+                if msg_len > u32::MAX as usize {
+                    error!("write_resp: encoded msg len {} exceed u32 limit", msg_len);
+                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
+                    return (seq, None);
+                } else if blob.len() > i32::MAX as usize {
+                    error!("write_resp: blob len {} exceed i32 limit", blob.len());
+                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
+                    return (seq, None);
+                }
+                Self::_write_head::<L>(logger, buf, 0, seq, msg_len as u32, blob.len() as i32);
+                return (seq, Some(blob));
             }
-            EncodedErr::Buf(s) => {
-                error_str = &s;
-            }
-            EncodedErr::Static(s) => {
-                error_str = s.as_bytes();
+            Err(e) => {
+                Self::_encode_error::<L>(logger, buf, seq, e);
+                return (seq, None);
             }
         }
-        let header = RespHead {
-            magic: RPC_MAGIC,
-            ver: RPC_VERSION_1,
-            flag: RESP_FLAG_HAS_ERR_STRING,
-            seq: little_endian::U64::new(seq),
-            msg_len: little_endian::U32::ZERO,
-            blob_len: little_endian::I32::new(error_str.len() as i32),
-        };
-        return (header, Some(error_str));
     }
 
     #[inline]
-    pub fn encode_msg(seq: u64, msg: &[u8], blob: Option<&Buffer>) -> Self {
-        let mut blob_len: i32 = 0;
-        if let Some(blob_buf) = blob.as_ref() {
-            blob_len = blob_buf.len() as i32;
+    pub fn encode_internal<'a, L>(
+        logger: &'a L, buf: &'a mut Vec<u8>, seq: u64, err: Option<RpcIntErr>,
+    ) -> u64
+    where
+        L: captains_log::filter::Filter,
+    {
+        debug_assert!(buf.capacity() >= RPC_RESP_HEADER_LEN);
+        // Leave a room at the begining of buffer for RespHead
+        unsafe { buf.set_len(RPC_RESP_HEADER_LEN) };
+        if let Some(e) = err {
+            Self::_encode_error::<L>(logger, buf, seq, e.into());
+            return seq;
+        } else {
+            // ping
+            Self::_write_head::<L>(logger, buf, 0, seq, 0, 0);
+            return seq;
         }
-        let header = RespHead {
-            magic: RPC_MAGIC,
-            ver: RPC_VERSION_1,
-            flag: 0,
-            seq: little_endian::U64::new(seq),
-            msg_len: little_endian::U32::new(msg.len() as u32),
-            blob_len: little_endian::I32::new(blob_len as i32),
-        };
-        return header;
     }
 
     #[inline(always)]
-    pub fn as_bytes(&self) -> &[u8] {
-        zerocopy::IntoBytes::as_bytes(self)
+    fn _encode_error<'b, L>(logger: &'b L, buf: &'b mut Vec<u8>, seq: u64, e: EncodedErr)
+    where
+        L: captains_log::filter::Filter,
+    {
+        macro_rules! write_err {
+            ($s: expr) => {
+                Self::_write_head::<L>(
+                    logger,
+                    buf,
+                    RESP_FLAG_HAS_ERR_STRING,
+                    seq,
+                    0,
+                    $s.len() as i32,
+                );
+                buf.write_all($s).expect("fill error str");
+            };
+        }
+        match e {
+            EncodedErr::Num(n) => {
+                Self::_write_head::<L>(logger, buf, RESP_FLAG_HAS_ERRNO, seq, n as u32, 0);
+            }
+            EncodedErr::Rpc(s) => {
+                write_err!(s.as_bytes());
+            }
+            EncodedErr::Buf(s) => {
+                write_err!(&s);
+            }
+            EncodedErr::Static(s) => {
+                write_err!(s.as_bytes());
+            }
+        }
+    }
+
+    #[inline]
+    fn _write_head<L>(
+        logger: &L, buf: &mut Vec<u8>, flag: u8, seq: u64, msg_len: u32, blob_len: i32,
+    ) where
+        L: captains_log::filter::Filter,
+    {
+        let header = Self::mut_from_bytes(&mut buf[0..RPC_RESP_HEADER_LEN]).expect("fill header");
+        header.magic = RPC_MAGIC;
+        header.ver = RPC_VERSION_1;
+        header.flag = flag;
+        header.msg_len.set(msg_len);
+        header.seq.set(seq);
+        header.blob_len.set(blob_len);
+        logger_trace!(logger, "resp {:?}", header);
     }
 
     #[inline(always)]

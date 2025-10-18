@@ -76,9 +76,14 @@ pub trait ServerTransport<F: ServerFactory>: Send + Sync + Sized + 'static + fmt
         &'a self, close_ch: &crossfire::MAsyncRx<()>,
     ) -> impl Future<Output = Result<RpcSvrReq<'a>, RpcIntErr>> + Send;
 
-    /// Write out the encoded request task
-    fn write_resp(
-        &self, seq: u64, res: Result<(Vec<u8>, Option<Buffer>), EncodedErr>,
+    /// Write our user task response
+    fn write_resp<C: Codec, T: ServerTaskEncode>(
+        &self, codec: &C, task: T,
+    ) -> impl Future<Output = io::Result<()>> + Send;
+
+    /// Write out ping resp or error
+    fn write_resp_internal(
+        &self, seq: u64, err: Option<RpcIntErr>,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Flush the response for the socket writer, if the transport has buffering logic
@@ -88,40 +93,9 @@ pub trait ServerTransport<F: ServerFactory>: Send + Sync + Sized + 'static + fmt
     fn close_conn(&self) -> impl Future<Output = ()> + Send;
 }
 
-/// A temporary struct to hold data buffer return by ServerTransport
-///
-/// NOTE: `RpcAction` and `msg` contains slice that reference to ServerTransport's internal buffer,
-/// you should parse and clone them.
-pub struct RpcSvrReq<'a> {
-    pub seq: u64,
-    pub action: RpcAction<'a>,
-    pub msg: &'a [u8],
-    pub blob: Option<Buffer>, // for write, this contains data
-}
-
-impl<'a> fmt::Debug for RpcSvrReq<'a> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "req(seq={}, action={:?})", self.seq, self.action)
-    }
-}
-
-/// A temporary struct to hold pre encoded buffer for RespReceiverBuf
-#[derive(Debug)]
-pub struct RpcSvrResp {
-    pub seq: u64,
-
-    pub msg: Option<Vec<u8>>,
-
-    pub blob: Option<Buffer>,
-
-    pub res: Result<(), EncodedErr>,
-}
-
 /// ReqDispatch should be a user-defined struct initialized for every connection, by ServerFactory::new_dispatcher.
 ///
-/// ReqDispatch must have Sync, because the connection reader coroutine calls dispatch_req(),
-/// and encode_resp() called by connection writer coroutine.
+/// ReqDispatch must have Sync, because the connection reader and writer access concurrently.
 /// It should incorporate a RespReceiver trait instance for the writer side.
 ///
 /// A `Codec` should be created and holds inside, shared by the read/write coroutine.
@@ -138,11 +112,7 @@ pub trait ReqDispatch<R: RespReceiver>: Send + Sync + Sized + 'static {
         &'a self, req: RpcSvrReq<'a>, noti: RespNoti<R::ChannelItem>,
     ) -> impl Future<Output = Result<(), ()>> + Send;
 
-    /// A delegate function to RespReceiver trait with owned codec
-    /// Called from the response writer
-    fn encode_resp(
-        &self, task: R::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>);
+    fn get_codec(&self) -> &impl Codec;
 }
 
 /// Trait to be incorporated in ReqDispatch trait, which defined the response channel item type.
@@ -152,15 +122,7 @@ pub trait ReqDispatch<R: RespReceiver>: Send + Sync + Sized + 'static {
 /// - [crate::server_impl::RespReceiverBuf]: When you have different types of task handled by different worker pools.
 /// Task can be encoded to RpcSvrResp before sent into channel.
 pub trait RespReceiver: Send + 'static {
-    type ChannelItem: Send + Unpin + 'static + fmt::Debug;
-
-    /// NOTE: Because the msg encoded from task resp is not a ref, should return a owned buffer.
-    ///
-    /// In order to return `Vec<u8>` from RpcSvrResp, should take the msg out, thus require task to
-    /// by &mut, but this does not affect encoding.
-    fn encode_resp<C: Codec>(
-        codec: &C, task: Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>);
+    type ChannelItem: ServerTaskEncode + Send + Unpin + 'static + fmt::Debug;
 }
 
 /// A writer channel to send response to the server framework.
@@ -206,10 +168,15 @@ pub trait ServerTaskDecode<R: Send + Unpin + 'static>: Send + Sized + Unpin + 's
 }
 
 /// How to encode a server response
-pub trait ServerTaskEncode {
-    fn encode_resp<C: Codec>(
-        self, codec: &C,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>);
+///
+/// For a server task with any type of buffer, user can always return u8 slice, so the framework
+/// don't need to known the type, but this requires reference and lifetime to the task.
+/// for the returning EncodedErr, it's possible generated during the encode,
+/// Otherwise when existing EncodedErr held in `res` field, the user need to take the res field out of the task.
+pub trait ServerTaskEncode: Send + 'static {
+    fn encode_resp<'a, 'b, C: Codec>(
+        &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>);
 }
 
 /// How to notify Rpc framework when a task is done
@@ -236,4 +203,55 @@ pub trait ServerTaskDone<T: Send + 'static, E: RpcErrCodec>: Sized + 'static {
 /// Get RpcAction from a enum task, or a sub-type that fits multiple RpcActions
 pub trait ServerTaskAction {
     fn get_action<'a>(&'a self) -> RpcAction<'a>;
+}
+
+/// A temporary struct to hold data buffer return by ServerTransport
+///
+/// NOTE: `RpcAction` and `msg` contains slice that reference to ServerTransport's internal buffer,
+/// you should parse and clone them.
+pub struct RpcSvrReq<'a> {
+    pub seq: u64,
+    pub action: RpcAction<'a>,
+    pub msg: &'a [u8],
+    pub blob: Option<Buffer>, // for write, this contains data
+}
+
+impl<'a> fmt::Debug for RpcSvrReq<'a> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "req(seq={}, action={:?})", self.seq, self.action)
+    }
+}
+
+/// A Struct to hold pre encoded buffer for server reponse
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct RpcSvrResp {
+    pub seq: u64,
+
+    pub msg: Option<Vec<u8>>,
+
+    pub blob: Option<Buffer>,
+
+    pub res: Option<Result<(), EncodedErr>>,
+}
+
+impl ServerTaskEncode for RpcSvrResp {
+    #[inline]
+    fn encode_resp<'a, 'b, C: Codec>(
+        &'a mut self, _codec: &'b C, buf: &'b mut Vec<u8>,
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
+        match self.res.take().unwrap() {
+            Ok(_) => {
+                if let Some(msg) = self.msg.as_ref() {
+                    use std::io::Write;
+                    buf.write_all(&msg).expect("fill msg");
+                    return (self.seq, Ok((msg.len(), self.blob.as_deref())));
+                } else {
+                    return (self.seq, Ok((0, self.blob.as_deref())));
+                }
+            }
+            Err(e) => return (self.seq, Err(e)),
+        }
+    }
 }

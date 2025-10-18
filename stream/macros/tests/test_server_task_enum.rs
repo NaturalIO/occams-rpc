@@ -160,8 +160,12 @@ fn test_server_task_enum_resp_macro() {
         &mut task1_for_encode,
         Err(Errno::EPERM.into()),
     );
-    let (seq1, resp1) =
-        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(task1_for_encode, &codec);
+    let mut buf = Vec::new();
+    let (seq1, resp1) = <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(
+        &mut task1_for_encode,
+        &codec,
+        &mut buf,
+    );
     assert_eq!(seq1, 123);
     assert_eq!(resp1.unwrap_err(), Errno::EPERM.encode(&codec));
 
@@ -170,8 +174,12 @@ fn test_server_task_enum_resp_macro() {
         &mut task2_for_encode,
         Ok(()),
     );
-    let (seq2, resp2) =
-        <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(task2_for_encode, &codec);
+    let mut buf = Vec::new();
+    let (seq2, resp2) = <ExampleServerTaskResp as ServerTaskEncode>::encode_resp(
+        &mut task2_for_encode,
+        &codec,
+        &mut buf,
+    );
     assert_eq!(seq2, 456);
     assert!(resp2.is_ok());
 

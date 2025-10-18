@@ -168,16 +168,12 @@ where
                 macro_rules! process {
                     ($task: expr) => {{
                         match $task {
-                            Ok(mut _task) => {
+                            Ok(_task) => {
                                 logger_trace!(self.conn.get_logger(), "write_resp {:?}", _task);
-                                let (seq, res) = self.dispatch.encode_resp(_task);
-                                self.conn.write_resp(seq, res).await?;
+                                self.conn.write_resp(self.dispatch.get_codec(), _task).await?;
                             }
-                            Err((seq, None)) => {
-                                self.conn.write_resp(seq, Ok((vec![], None))).await?;
-                            }
-                            Err((seq, Some(err))) => {
-                                self.conn.write_resp(seq, Err(err.into())).await?;
+                            Err((seq, err)) => {
+                                self.conn.write_resp_internal(seq, err).await?;
                             }
                         }
                     }};
@@ -327,11 +323,9 @@ where
         }
     }
 
-    #[inline]
-    fn encode_resp(
-        &self, task: R::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
-        R::encode_resp::<C>(&self.codec, task)
+    #[inline(always)]
+    fn get_codec(&self) -> &impl Codec {
+        &self.codec
     }
 }
 
@@ -340,15 +334,9 @@ pub struct RespReceiverTask<T: ServerTaskResp>(PhantomData<fn(&T)>);
 
 impl<T: ServerTaskResp> RespReceiver for RespReceiverTask<T> {
     type ChannelItem = T;
-
-    #[inline]
-    fn encode_resp<C: Codec>(
-        codec: &C, task: Self::ChannelItem,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
-        task.encode_resp(codec)
-    }
 }
 
+/*
 /// RespReceiver for pre encoded resp [RpcSvrResp]
 pub struct RespReceiverBuf();
 impl RespReceiver for RespReceiverBuf {
@@ -364,6 +352,7 @@ impl RespReceiver for RespReceiverBuf {
         }
     }
 }
+*/
 
 /// A container that impl ServerTaskResp to show an example,
 /// presuming you have a different types to represent Request and Response.
@@ -447,17 +436,18 @@ where
     M: Serialize + Send + Unpin + 'static,
     E: RpcErrCodec,
 {
-    fn encode_resp<C: Codec>(
-        self, codec: &C,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
+    #[inline]
+    fn encode_resp<'a, 'b, C: Codec>(
+        &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
         if let Some(res) = self.res.as_ref() {
             match res {
-                Ok(_) => match codec.encode(&self.msg) {
+                Ok(_) => match codec.encode_into(&self.msg, buf) {
                     Err(_) => {
                         return (self.seq, Err(RpcIntErr::Encode.into()));
                     }
-                    Ok(resp) => {
-                        return (self.seq, Ok((resp, self.blob)));
+                    Ok(msg_len) => {
+                        return (self.seq, Ok((msg_len, self.blob.as_deref())));
                     }
                 },
                 Err(e) => {
@@ -565,28 +555,29 @@ where
     P: Send + Unpin + 'static + Serialize,
     E: RpcErrCodec,
 {
-    fn encode_resp<C: Codec>(
-        self, codec: &C,
-    ) -> (u64, Result<(Vec<u8>, Option<Buffer>), EncodedErr>) {
+    #[inline]
+    fn encode_resp<'a, 'b, C: Codec>(
+        &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
         if let Some(res) = self.res.as_ref() {
             match res {
-                Err(e) => {
-                    return (self.seq, Err(e.encode::<C>(codec)));
-                }
                 Ok(_) => {
                     if let Some(resp) = self.resp.as_ref() {
-                        match codec.encode(resp) {
+                        match codec.encode_into(resp, buf) {
                             Err(_) => {
                                 return (self.seq, Err(RpcIntErr::Encode.into()));
                             }
-                            Ok(resp_buf) => {
-                                return (self.seq, Ok((resp_buf, self.resp_blob)));
+                            Ok(msg_len) => {
+                                return (self.seq, Ok((msg_len, self.resp_blob.as_deref())));
                             }
                         }
                     } else {
                         // empty response
-                        return (self.seq, Ok((vec![], self.resp_blob)));
+                        return (self.seq, Ok((0, self.resp_blob.as_deref())));
                     }
+                }
+                Err(e) => {
+                    return (self.seq, Err(e.encode::<C>(codec)));
                 }
             }
         } else {
