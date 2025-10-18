@@ -238,9 +238,11 @@ pub fn client_task_enum(
 ///
 /// ### Macro Arguments:
 ///
-/// * `req`: Indicates that the enum handles requests. When specified, each variant must have an `#[action(...)]` attribute.
-/// * `resp`: Indicates that the enum handles responses.
-/// * `resp_type = <Type>`: Required if `req` is specified but `resp` is not. Defines the response type.
+/// The `server_task_enum` can accept either or both of "req" and "resp" flags.
+/// - If `req` is specified, the enum is request task, the macro will impl [ServerTaskDecode](crate::server::ServerTaskDecode), [ServerTaskAction](crate::ServerTaskAction). each variant must have an `#[action(...)]` attribute.
+/// - If "resp" is specified, the enum is reponse task. The macro will impl [ServerTaskEncode](crate::server::ServerTaskEncode), [ServerTaskDone](crate::server::ServerTaskDone)
+/// - If both `req` and `resp` is specified, the response type for `ServerTaskDecode<R>` and `ServerTaskDone<R>` is implicitly `Self` (the enum itself). `resp_type` can be omitted.
+/// - If only "req" is specified (and "resp" is not), then `resp_type` must be provided. This `resp_type` specifies the type `<R>` for parameters of `ServerTaskDecode<R>` and `ServerTaskDone<R>`.
 ///
 /// ### Variant Attributes:
 ///
