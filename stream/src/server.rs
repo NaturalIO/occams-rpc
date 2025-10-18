@@ -92,12 +92,18 @@ pub trait ServerTransport<F: ServerFactory>: Send + Sync + Sized + 'static + fmt
 ///
 /// NOTE: `RpcAction` and `msg` contains slice that reference to ServerTransport's internal buffer,
 /// you should parse and clone them.
-#[derive(Debug)]
 pub struct RpcSvrReq<'a> {
     pub seq: u64,
     pub action: RpcAction<'a>,
     pub msg: &'a [u8],
     pub blob: Option<Buffer>, // for write, this contains data
+}
+
+impl<'a> fmt::Debug for RpcSvrReq<'a> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "req(seq={}, action={:?})", self.seq, self.action)
+    }
 }
 
 /// A temporary struct to hold pre encoded buffer for RespReceiverBuf
