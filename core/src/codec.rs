@@ -9,3 +9,14 @@ pub trait Codec: Default + Send + Sync + Sized + 'static {
 
     fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()>;
 }
+
+#[allow(dead_code)]
+pub trait BytesCodec: Codec {
+    fn encode<T: Serialize>(&self, task: &T) -> Result<Vec<u8>, ()>
+    where
+        T: AsRef<u8>;
+
+    fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()>
+    where
+        T: AsRef<u8>;
+}
