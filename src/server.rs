@@ -137,15 +137,15 @@ pub trait ServiceDyn<C: Codec>: Send + Sync + 'static {
 }
 
 #[async_trait::async_trait]
-impl<S: ServiceDyn<C> + Sync, C: Codec> ServiceDyn<C> for Arc<S> {
+impl<S: ServiceStatic<C>, C: Codec> ServiceDyn<C> for S {
     #[inline(always)]
     fn get_service_name(&self) -> &'static str {
-        self.as_ref().get_service_name()
+        <Self as ServiceStatic<C>>::SERVICE_NAME
     }
 
     #[inline(always)]
     async fn serve_dyn(&self, req: Request<C>) {
-        self.as_ref().serve_dyn(req).await
+        self.serve(req).await
     }
 }
 
@@ -180,18 +180,6 @@ impl<C: Codec> ServiceStatic<C> for ServiceMuxDyn<C> {
                 req.set_rpc_error(RpcIntErr::Service);
             }
         }
-    }
-}
-
-#[async_trait::async_trait]
-impl<C: Codec> ServiceDyn<C> for ServiceMuxDyn<C> {
-    fn get_service_name(&self) -> &'static str {
-        unreachable!();
-    }
-
-    #[inline(always)]
-    async fn serve_dyn(&self, req: Request<C>) {
-        self.serve(req).await
     }
 }
 
