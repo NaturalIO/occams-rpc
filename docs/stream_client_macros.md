@@ -122,9 +122,9 @@ The `#[client_task]` macro automatically generates the following trait implement
     *   This trait is implemented when `#[field(res)]` and `#[field(noti)]` are present.
     *   The generated implementation provides the following methods:
         ```rust
-        impl<E: occams_rpc_core::error::RpcErrCodec> occams_rpc::stream::client::ClientTaskDone for T {
-            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) { /* ... */ }
-            fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) { /* ... */ }
+        impl<E: occams_rpc_stream::RpcErrCodec> occams_rpc::stream::client::ClientTaskDone for T {
+            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_stream::EncodedErr) { /* ... */ }
+            fn set_rpc_error(&mut self, e: occams_rpc_stream::RpcIntErr) { /* ... */ }
             fn set_ok(&mut self) { /* ... */ }
             fn done(self) { /* ... */ }
         }
@@ -148,7 +148,7 @@ The `#[client_task_enum]` will implement `From` to assist conversion from its va
 
 ## User Responsibilities
 
-Users are responsible for implementing the `occams_rpc_core::error::RpcErrCodec` trait for their custom error types, which are then used with `RpcError<E>`. The framework handles calling `set_ok()`, `set_rpc_error()`, `set_custom_error()`, and `done()` to signal task completion.
+Users are responsible for implementing the `occams_rpc_stream::RpcErrCodec` trait for their custom error types, which are then used with `RpcError<E>`. The framework handles calling `set_ok()`, `set_rpc_error()`, `set_custom_error()`, and `done()` to signal task completion.
 
 If the `#[field(res)]` and `#[field(noti)]` attributes are not used, the user must implement the `ClientTaskDone` trait manually. When these attributes are used, the macro generates this implementation automatically.
 
