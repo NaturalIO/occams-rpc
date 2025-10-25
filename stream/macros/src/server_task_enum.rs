@@ -331,6 +331,23 @@ fn test_not_an_enum() {}
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
 /// #[server_task_enum(req)]
+/// pub enum EnumNoErrorType {
+///     #[action(1)]
+///     Task1, // Unit variant
+///     #[action(2)]
+///     Task2(MyMsg, MyMsg), // Multiple fields
+/// }
+/// ```
+#[doc(hidden)]
+#[allow(dead_code)]
+fn test_no_error_type() {}
+
+/// ```compile_fail
+/// use occams_rpc_stream_macros::server_task_enum;
+/// use serde_derive::{Deserialize, Serialize};
+/// #[derive(Serialize, Deserialize)]
+/// struct MyMsg;
+/// #[server_task_enum(req, error=())]
 /// pub enum InvalidVariantFieldCount {
 ///     #[action(1)]
 ///     Task1, // Unit variant
@@ -347,7 +364,7 @@ fn test_invalid_variant_field_count() {}
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
-/// #[server_task_enum(req, resp, resp_type=MyMsg)]
+/// #[server_task_enum(req, resp, resp_type=MyMsg, error=())]
 /// pub enum RespAndRespType {
 ///     #[action(1)]
 ///     Task1(MyMsg),
@@ -362,7 +379,7 @@ fn test_resp_and_resp_type() {}
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
-/// #[server_task_enum(req)] // Missing resp_type
+/// #[server_task_enum(req, error=())] // Missing resp_type
 /// pub enum MissingRespType {
 ///     #[action(1)]
 ///     Task1(MyMsg),
@@ -377,7 +394,7 @@ fn test_missing_resp_type() {}
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
-/// #[server_task_enum(req)]
+/// #[server_task_enum(req, error=())]
 /// pub enum MissingActionAttribute {
 ///     Task1(MyMsg),
 /// }
@@ -396,12 +413,12 @@ fn test_missing_action_attribute() {}
 /// #[derive(Default, Deserialize, Serialize)]
 /// pub struct MyServerReq;
 ///
-/// #[server_task_enum(req, resp_type=MyServerResp)]
+/// #[server_task_enum(req, resp_type=MyServerResp, error=())]
 /// pub enum MyServerEnumTask {
 ///     #[action(1)]
-///     VariantA(ServerTaskVariant<MyServerResp, MyServerReq>),
+///     VariantA(ServerTaskVariant<MyServerResp, MyServerReq, ()>),
 ///     #[action(2)]
-///     VariantB(ServerTaskVariant<MyServerResp, MyServerReq>), // Duplicate sub-type MyServerReq
+///     VariantB(ServerTaskVariant<MyServerResp, MyServerReq, ()>), // Duplicate sub-type MyServerReq
 /// }
 ///
 /// #[derive(Default, Debug)]

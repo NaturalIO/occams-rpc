@@ -285,6 +285,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 /// use occams_rpc_stream::{RpcErrCodec, RpcError};
 /// use crossfire::MTx;
 /// use serde_derive::{Deserialize, Serialize};
+/// use nix::errno::Errno;
 /// use std::marker::PhantomData;
 ///
 /// #[derive(Default, Deserialize, Serialize)]
@@ -294,7 +295,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 /// pub struct MyTaskResp;
 ///
 /// #[client_task]
-/// pub struct TaskA<E: RpcErrCodec> {
+/// pub struct TaskA {
 ///     #[field(common)]
 ///     common: ClientTaskCommon,
 ///     #[field(req)]
@@ -302,17 +303,15 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 ///     #[field(resp)]
 ///     resp: Option<MyTaskResp>,
 ///     #[field(res)]
-///     res: Option<Result<(), RpcError<E>>>,
+///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<MyEnumTask<E>>>,
-///     #[serde(skip)]
-///     _e: PhantomData<E>,
+///     noti: Option<MTx<MyEnumTask<Errno>>>,
 /// }
 ///
-/// #[client_task_enum]
-/// pub enum MyEnumTask<E: RpcErrCodec> {
-///     VariantA(TaskA<E>),
-///     VariantB(TaskA<E>), // Duplicate sub-type TaskA
+/// #[client_task_enum(error=nix::error::Errno)]
+/// pub enum MyEnumTask {
+///     VariantA(TaskA<Errno>),
+///     VariantB(TaskA<Errno>), // Duplicate sub-type TaskA
 /// }
 /// ```
 #[doc(hidden)]
