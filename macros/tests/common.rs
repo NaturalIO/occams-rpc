@@ -1,4 +1,4 @@
-use occams_rpc::server::{ServerReq, ServerResp};
+use occams_rpc::server::task::{APIServerReq, APIServerResp};
 use occams_rpc_api_macros::{method, service, service_mux_struct};
 use occams_rpc_codec::MsgpCodec;
 use occams_rpc_core::{error::RpcError, Codec};
@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub fn create_mock_request<T: Serialize>(
-    seq: u64, service: String, method: String, req: &T, noti: RespNoti<ServerResp>,
-) -> ServerReq<MsgpCodec> {
+    seq: u64, service: String, method: String, req: &T, noti: RespNoti<APIServerResp>,
+) -> APIServerReq<MsgpCodec> {
     let codec = Arc::new(MsgpCodec::default());
     let req_data = codec.encode(req).expect("encode");
-    return ServerReq { seq, service, method, req: Some(req_data), codec, noti };
+    return APIServerReq { seq, service, method, req: Some(req_data), codec, noti };
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]

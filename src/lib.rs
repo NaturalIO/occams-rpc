@@ -30,3 +30,9 @@ pub type RT = occams_rpc_smol::SmolRT;
 
 pub mod client;
 pub mod server;
+
+// re-export for macros, so that user don't need to use multiple crates
+pub use occams_rpc_core::{
+    Codec,
+    error::{RpcErrCodec, RpcError, RpcIntErr},
+};

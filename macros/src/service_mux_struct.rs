@@ -13,14 +13,14 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
         quote! {
-            <#field_type as occams_rpc::service::ServiceStatic<C>>::SERVICE_NAME => self.#field_name.serve(req).await,
+            <#field_type as occams_rpc::server::ServiceStatic<C>>::SERVICE_NAME => self.#field_name.serve(req).await,
         }
     });
 
     let expanded = quote! {
-        impl<C: occams_rpc_core::Codec> occams_rpc::service::ServiceStatic <C> for #struct_name {
+        impl<C: occams_rpc_core::Codec> occams_rpc::server::ServiceStatic <C> for #struct_name {
             const SERVICE_NAME: &'static str = "";
-            fn serve(&self, req: occams_rpc::server::APIServerReq<C>) -> impl std::future::Future<Output = ()> + Send {
+            fn serve(&self, req: occams_rpc::server::task::APIServerReq<C>) -> impl std::future::Future<Output = ()> + Send {
                 async move {
                     match req.service.as_str() {
                         #(#field_handlers)*

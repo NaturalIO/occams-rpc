@@ -1,14 +1,13 @@
-use occams_rpc::client::APIClientReq;
+use occams_rpc::client::ClientCaller;
+use occams_rpc::client::{task::APIClientReq, AsyncEndpoint};
+use occams_rpc::{Codec, RpcError};
 use occams_rpc_api_macros::endpoint_async;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_core::{ClientConfig, Codec};
 use occams_rpc_stream::client::task::{
     ClientTaskAction, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
 };
-use occams_rpc_stream::client::{ClientCaller, ClientFacts};
 use occams_rpc_stream::proto::RpcAction;
-use occams_rpc_tokio::TokioRT;
+use occams_rpc_tokio::ClientDefault;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -18,34 +17,6 @@ use std::sync::{Arc, Mutex};
 struct StoredReq {
     action: String,
     req_msg: Vec<u8>,
-}
-
-// Mock Factory
-#[derive(Clone)]
-struct MockFactory(ClientConfig);
-
-impl ClientFacts for MockFactory {
-    type Logger = captains_log::filter::DummyFilter;
-    type Codec = MsgpCodec;
-    type Task = APIClientReq;
-    type IO = TokioRT;
-
-    fn spawn_detach<F, R>(&self, f: F)
-    where
-        F: Future<Output = R> + Send + 'static,
-        R: Send + 'static,
-    {
-        tokio::spawn(f);
-    }
-
-    fn new_logger(&self, _conn_id: &str) -> Self::Logger {
-        captains_log::filter::DummyFilter()
-    }
-
-    #[inline]
-    fn get_config(&self) -> &ClientConfig {
-        &self.0
-    }
 }
 
 // Mock Caller
@@ -60,7 +31,7 @@ impl MockCaller {
 }
 
 impl ClientCaller for MockCaller {
-    type Facts = MockFactory;
+    type Facts = ClientDefault<APIClientReq, MsgpCodec>;
 
     async fn send_req(&self, mut task: APIClientReq) {
         println!("Sending request: {:?}", task);
@@ -158,7 +129,7 @@ pub trait MyTestService: Send + Sync + 'static {
 pub trait MyFutureService: Send + Sync + 'static {
     fn compute(
         &self, args: ComputeArgs,
-    ) -> impl std::future::Future<Output = Result<ComputeResp, RpcError<()>>> + Send;
+    ) -> impl Future<Output = Result<ComputeResp, RpcError<()>>> + Send;
 }
 
 // Service Trait with impl Future but without async_trait attribute
@@ -166,14 +137,14 @@ pub trait MyFutureService: Send + Sync + 'static {
 pub trait NoAsyncTraitService: Send + Sync + 'static {
     fn concat(
         &self, args: ConcatArgs,
-    ) -> impl std::future::Future<Output = Result<ConcatResp, RpcError<()>>> + Send;
+    ) -> impl Future<Output = Result<ConcatResp, RpcError<()>>> + Send;
 }
 
 // Implementation for MyFutureService
 impl MyFutureService for () {
     fn compute(
         &self, args: ComputeArgs,
-    ) -> impl std::future::Future<Output = Result<ComputeResp, RpcError<()>>> + Send {
+    ) -> impl Future<Output = Result<ComputeResp, RpcError<()>>> + Send {
         async move { Ok(ComputeResp { result: args.x * args.y }) }
     }
 }
@@ -182,7 +153,7 @@ impl MyFutureService for () {
 impl NoAsyncTraitService for () {
     fn concat(
         &self, args: ConcatArgs,
-    ) -> impl std::future::Future<Output = Result<ConcatResp, RpcError<()>>> + Send {
+    ) -> impl Future<Output = Result<ConcatResp, RpcError<()>>> + Send {
         async move { Ok(ConcatResp { result: format!("{}{}", args.a, args.b) }) }
     }
 }
@@ -191,7 +162,7 @@ impl NoAsyncTraitService for () {
 #[tokio::test]
 async fn test_endpoint_async_macro_with_async_trait() {
     let caller = MockCaller::new();
-    let client = MyTestClient::new(caller.clone());
+    let client = MyTestClient::new(AsyncEndpoint::new(caller.clone()));
 
     // Call method with args
     let resp = client.add(AddArgs { a: 10, b: 20 }).await.unwrap();
@@ -224,7 +195,7 @@ async fn test_endpoint_async_macro_with_async_trait() {
 #[tokio::test]
 async fn test_endpoint_async_macro_with_impl_future() {
     let caller = MockCaller::new();
-    let client = MyFutureClient::new(caller.clone());
+    let client = MyFutureClient::new(AsyncEndpoint::new(caller.clone()));
 
     // Call method with args that returns impl Future
     let future = client.compute(ComputeArgs { x: 5, y: 7 });
@@ -246,7 +217,7 @@ async fn test_endpoint_async_macro_with_impl_future() {
 #[tokio::test]
 async fn test_endpoint_async_macro_without_async_trait() {
     let caller = MockCaller::new();
-    let client = NoAsyncTraitClient::new(caller.clone());
+    let client = NoAsyncTraitClient::new(AsyncEndpoint::new(caller.clone()));
 
     // Call method with args that returns impl Future
     let future = client.concat(ConcatArgs { a: "Hello".to_string(), b: "World".to_string() });
@@ -268,7 +239,7 @@ async fn test_endpoint_async_macro_without_async_trait() {
 #[tokio::test]
 async fn test_endpoint_async_macro_with_error() {
     let caller = MockCaller::new();
-    let client = MyTestClient::new(caller.clone());
+    let client = MyTestClient::new(AsyncEndpoint::new(caller.clone()));
 
     // Call method that returns an error
     let result = client.error_method(AddArgs { a: 1, b: 2 }).await;

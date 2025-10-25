@@ -9,13 +9,13 @@ use std::fmt;
 use std::io::Write;
 
 pub struct APIClientReq {
-    pub(crate) common: ClientTaskCommon,
-    pub(crate) req_msg: Option<Vec<u8>>,
+    pub common: ClientTaskCommon,
+    pub req_msg: Option<Vec<u8>>,
     /// action is in "Service.method" format
-    pub(crate) action: String,
-    pub(crate) resp: Option<Vec<u8>>,
-    pub(crate) res: Option<Result<(), EncodedErr>>,
-    pub(crate) noti: Option<crossfire::Tx<Self>>,
+    pub action: String,
+    pub resp: Option<Vec<u8>>,
+    pub res: Option<Result<(), EncodedErr>>,
+    pub noti: Option<crossfire::Tx<Self>>,
 }
 
 impl ClientTaskEncode for APIClientReq {

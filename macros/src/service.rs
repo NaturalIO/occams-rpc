@@ -112,7 +112,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let handler_methods = methods_data.iter().map(|(method_name, arg_ty)| {
                 let handler_name = format_ident!("__handle_{}", method_name);
                 quote! {
-                    async fn #handler_name<C: occams_rpc_core::Codec>(&self, req: occams_rpc::server::APIServerReq<C>) {
+                    async fn #handler_name<C: occams_rpc::Codec>(&self, req: occams_rpc::server::task::APIServerReq<C>) {
                         let arg = match req.req.as_ref() {
                             None => {
                                 unreachable!();
@@ -120,7 +120,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             Some(buf) => match req.codec.decode::<#arg_ty>(&buf) {
                                 Ok(arg) => arg,
                                 Err(_) => {
-                                    req.set_rpc_error(occams_rpc_core::error::RpcIntErr::Decode);
+                                    req.set_rpc_error(occams_rpc::RpcIntErr::Decode);
                                     return;
                                 }
                             },
@@ -151,7 +151,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let (impl_generics, _ty_generics, where_clause) = item_impl.generics.split_for_impl();
 
             let mut service_trait_generics = item_impl.generics.clone();
-            service_trait_generics.params.push(syn::parse_quote!(C: occams_rpc_core::Codec));
+            service_trait_generics.params.push(syn::parse_quote!(C: occams_rpc::Codec));
             let (service_trait_impl_generics, _, service_trait_where_clause) =
                 service_trait_generics.split_for_impl();
 
@@ -160,14 +160,14 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #(#handler_methods)*
                 }
 
-                impl #service_trait_impl_generics occams_rpc::service::ServiceStatic<C> for #self_ty #service_trait_where_clause {
+                impl #service_trait_impl_generics occams_rpc::server::ServiceStatic<C> for #self_ty #service_trait_where_clause {
                     const SERVICE_NAME: &'static str = #service_name_pascal;
-                    fn serve(&self, req: occams_rpc::server::APIServerReq<C>) -> impl std::future::Future<Output = ()> + Send {
+                    fn serve(&self, req: occams_rpc::server::task::APIServerReq<C>) -> impl std::future::Future<Output = ()> + Send {
                         async move {
                             match req.method.as_str() {
                                 #(#dispatch_arms)*
                                 _ => {
-                                    req.set_rpc_error(occams_rpc_core::error::RpcIntErr::Method);
+                                    req.set_rpc_error(occams_rpc::RpcIntErr::Method);
                                 }
                             }
                         }
@@ -188,7 +188,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// ```compile_fail
 /// use occams_rpc_api_macros::{method, service};
-/// use occams_rpc_core::error::RpcError;
+/// use occams_rpc::RpcError;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Deserialize, Serialize, PartialEq)]

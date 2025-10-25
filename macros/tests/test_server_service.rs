@@ -1,4 +1,4 @@
-use occams_rpc::service::ServiceStatic;
+use occams_rpc::server::ServiceStatic;
 use occams_rpc_codec::MsgpCodec;
 use occams_rpc_core::{
     error::{EncodedErr, RpcIntErr},
