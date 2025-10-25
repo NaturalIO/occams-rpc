@@ -14,7 +14,7 @@ fmt: init
 	cargo fmt
 
 .PHONY: test
-all_test: test-core test-codec test-stream-macros test-api-macros test
+all-test: test-core test-codec test-stream-macros test-api-macros test
 	echo run all tests
 
 .PHONY: test-core
