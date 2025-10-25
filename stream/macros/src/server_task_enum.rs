@@ -220,7 +220,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 #(#where_clauses_for_decode),*
             {
                 #[inline]
-                fn decode_req<'a, C: occams_rpc_core::Codec>(
+                fn decode_req<'a, C: occams_rpc_stream::Codec>(
                     codec: &'a C,
                     action: occams_rpc_stream::proto::RpcAction<'a>,
                     seq: u64,
@@ -248,11 +248,11 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
             impl #impl_generics occams_rpc_stream::server::task::ServerTaskEncode for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn encode_resp<'a, 'b, C: occams_rpc_core::Codec>(
+                fn encode_resp<'a, 'b, C: occams_rpc_stream::Codec>(
                     &'a mut self,
                     codec: &C,
                     buf: &'b mut Vec<u8>,
-                ) -> (u64, Result<(usize, Option<&'a [u8]>), occams_rpc_core::error::EncodedErr>) {
+                ) -> (u64, Result<(usize, Option<&'a [u8]>), occams_rpc_stream::EncodedErr>) {
                     match self {
                         #(#encode_arms)*
                     }

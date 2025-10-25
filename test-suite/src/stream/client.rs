@@ -2,13 +2,12 @@ use crossfire::*;
 use io_buffer::Buffer;
 use nix::errno::Errno;
 use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::RpcError;
 #[cfg(not(feature = "tokio"))]
 use occams_rpc_smol::{ClientDefault, SmolRT};
 use occams_rpc_stream::client::stream::ClientStream;
 use occams_rpc_stream::client::task::*;
 use occams_rpc_stream::client::*;
-use occams_rpc_stream::error::RpcIntErr;
+use occams_rpc_stream::{RpcError, RpcIntErr};
 use occams_rpc_tcp::TcpClient;
 #[cfg(feature = "tokio")]
 use occams_rpc_tokio::{ClientDefault, TokioRT};

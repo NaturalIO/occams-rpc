@@ -195,7 +195,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics occams_rpc_stream::client::task::ClientTaskEncode for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
+            fn encode_req<C: occams_rpc_stream::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
                 match self {
                     #(#encode_req_arms)*
                 }
@@ -211,7 +211,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics occams_rpc_stream::client::task::ClientTaskDecode for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn decode_resp<C: occams_rpc_core::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
+            fn decode_resp<C: occams_rpc_stream::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
                 match self {
                     #(#decode_resp_arms)*
                 }
@@ -236,7 +236,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics occams_rpc_stream::client::task::ClientTaskGetResult<#error_type> for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError<#error_type>> {
+            fn get_result(&self) -> Result<(), &occams_rpc_stream::RpcError<#error_type>> {
                 match self {
                     #(#get_result_arms)*
                 }
@@ -245,14 +245,14 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics occams_rpc_stream::client::task::ClientTaskDone for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) {
+            fn set_custom_error<C: occams_rpc_stream::Codec>(&mut self, codec: &C, res: occams_rpc_stream::EncodedErr) {
                 match self {
                     #(#set_custom_error_arms)*
                 }
             }
 
             #[inline]
-            fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) {
+            fn set_rpc_error(&mut self, e: occams_rpc_stream::RpcIntErr) {
                 match self {
                     #(#set_rpc_error_arms)*
                 }
@@ -282,7 +282,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 /// ```compile_fail
 /// use occams_rpc_stream_macros::{client_task, client_task_enum};
 /// use occams_rpc_stream::client::task::ClientTaskCommon;
-/// use occams_rpc_core::error::{RpcErrCodec, RpcError};
+/// use occams_rpc_stream::{RpcErrCodec, RpcError};
 /// use crossfire::MTx;
 /// use serde_derive::{Deserialize, Serialize};
 /// use std::marker::PhantomData;

@@ -1,10 +1,9 @@
 use crate::stream::{client::*, server::*};
 use crate::*;
 use crossfire::mpsc;
-use occams_rpc_core::error::RpcError;
 use occams_rpc_stream::client::{ClientConfig, task::ClientTaskGetResult};
-use occams_rpc_stream::error::RpcIntErr;
 use occams_rpc_stream::server::{ServerConfig, task::ServerTaskDone};
+use occams_rpc_stream::{RpcError, RpcIntErr};
 use std::time::Duration;
 
 #[logfn]

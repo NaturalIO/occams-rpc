@@ -71,4 +71,6 @@ extern crate captains_log;
 pub mod client;
 pub mod proto;
 pub mod server;
-pub use occams_rpc_core::error;
+// re-export for macros, so that user don't need to use multiple crates
+pub use occams_rpc_core::Codec;
+pub use occams_rpc_core::error::*;
