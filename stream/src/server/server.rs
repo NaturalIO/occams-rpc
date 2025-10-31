@@ -2,7 +2,6 @@ use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
 use futures::future::{AbortHandle, Abortable};
-use occams_rpc_core::{error::*, io::AsyncListener, runtime::AsyncIO};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -36,10 +35,10 @@ where
         }
     }
 
-    pub fn listen<T: ServerTransport, D: Dispatch>(
+    pub async fn listen<T: ServerTransport, D: Dispatch>(
         &mut self, addr: &str, dispatch: D,
     ) -> io::Result<String> {
-        match <T::Listener as AsyncListener>::bind(addr) {
+        match T::bind(addr).await {
             Err(e) => {
                 error!("bind addr {:?} err: {}", addr, e);
                 return Err(e);
@@ -121,7 +120,7 @@ where
             server_close_rx,
             logger: facts.new_logger(),
         };
-        AsyncIO::spawn_detach(facts, async move { reader.run().await });
+        facts.spawn_detach(async move { reader.run().await });
 
         impl<T: ServerTransport, D: Dispatch> Reader<T, D> {
             async fn run(self) -> Result<(), ()> {
@@ -168,7 +167,7 @@ where
             logger: Arc<LogFilter>,
         }
         let writer = Writer::<T, D> { done_rx, codec, conn, logger: facts.new_logger() };
-        AsyncIO::spawn_detach(facts, async move { writer.run().await });
+        facts.spawn_detach(async move { writer.run().await });
 
         impl<T: ServerTransport, D: Dispatch> Writer<T, D> {
             async fn run(self) -> Result<(), io::Error> {

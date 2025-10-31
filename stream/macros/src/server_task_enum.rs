@@ -112,15 +112,15 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 let action_token_stream = match action_meta {
                     NestedMeta::Lit(syn::Lit::Str(s)) => {
                         let action_str = s.value();
-                        quote! { occams_rpc_stream::proto::RpcAction::Str(#action_str) }
+                        quote! { razor_stream::proto::RpcAction::Str(#action_str) }
                     }
                     NestedMeta::Lit(syn::Lit::Int(i)) => {
                         let action_int =
                             i.base10_parse::<i32>().expect("Invalid integer literal for action");
-                        quote! { occams_rpc_stream::proto::RpcAction::Num(#action_int) }
+                        quote! { razor_stream::proto::RpcAction::Num(#action_int) }
                     }
                     NestedMeta::Meta(syn::Meta::Path(p)) => {
-                        quote! { occams_rpc_stream::proto::RpcAction::Num(val) if val == (#p as i32) }
+                        quote! { razor_stream::proto::RpcAction::Num(val) if val == (#p as i32) }
                     }
                     _ => panic!(
                         "Unsupported action type for decode_arms. Only string/integer literals and enum variants are supported."
@@ -128,7 +128,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 };
                 decode_arms.push(quote! {
                             #action_token_stream => {
-                                let task = <#inner_type as occams_rpc_stream::server::task::ServerTaskDecode<#resp_type>>::decode_req::<C>(codec, action, seq, req, blob, noti)?;
+                                let task = <#inner_type as razor_stream::server::task::ServerTaskDecode<#resp_type>>::decode_req::<C>(codec, action, seq, req, blob, noti)?;
                                 Ok(#enum_name::#variant_name(task))
                             }
                         });
@@ -142,11 +142,11 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
             if actions.len() > 1 || (actions.len() == 0 && inner_type_exists) {
                 where_clauses_for_decode.push(quote! {
-                    #inner_type: occams_rpc_stream::server::task::ServerTaskDecode<#resp_type> + occams_rpc_stream::server::task::ServerTaskAction
+                    #inner_type: razor_stream::server::task::ServerTaskDecode<#resp_type> + razor_stream::server::task::ServerTaskAction
                 });
             } else {
                 where_clauses_for_decode.push(quote! {
-                    #inner_type: occams_rpc_stream::server::task::ServerTaskDecode<#resp_type>
+                    #inner_type: razor_stream::server::task::ServerTaskDecode<#resp_type>
                 });
             }
 
@@ -160,15 +160,15 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 let action_token_stream = match action_meta {
                     NestedMeta::Lit(syn::Lit::Str(s)) => {
                         let action_str = s.value();
-                        quote! { occams_rpc_stream::proto::RpcAction::Str(#action_str) }
+                        quote! { razor_stream::proto::RpcAction::Str(#action_str) }
                     }
                     NestedMeta::Lit(syn::Lit::Int(i)) => {
                         let action_int =
                             i.base10_parse::<i32>().expect("Invalid integer literal for action");
-                        quote! { occams_rpc_stream::proto::RpcAction::Num(#action_int) }
+                        quote! { razor_stream::proto::RpcAction::Num(#action_int) }
                     }
                     NestedMeta::Meta(syn::Meta::Path(p)) => {
-                        quote! { occams_rpc_stream::proto::RpcAction::Num(#p as i32) }
+                        quote! { razor_stream::proto::RpcAction::Num(#p as i32) }
                     }
                     _ => panic!(
                         "Unsupported action type for get_action. Only string/integer literals and enum variants are supported."
@@ -215,18 +215,18 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
     let req_impl = if has_req {
         quote! {
 
-            impl #impl_generics occams_rpc_stream::server::task::ServerTaskDecode<#resp_type> for #enum_name #ty_generics #where_clause
+            impl #impl_generics razor_stream::server::task::ServerTaskDecode<#resp_type> for #enum_name #ty_generics #where_clause
             where
                 #(#where_clauses_for_decode),*
             {
                 #[inline]
-                fn decode_req<'a, C: occams_rpc_stream::Codec>(
+                fn decode_req<'a, C: razor_stream::Codec>(
                     codec: &'a C,
-                    action: occams_rpc_stream::proto::RpcAction<'a>,
+                    action: razor_stream::proto::RpcAction<'a>,
                     seq: u64,
                     req: &'a [u8],
                     blob: Option<io_buffer::Buffer>,
-                    noti: occams_rpc_stream::server::task::RespNoti<#resp_type>,
+                    noti: razor_stream::server::task::RespNoti<#resp_type>,
                 ) -> Result<Self, ()> {
                     match action {
                         #(#decode_arms)*
@@ -244,24 +244,24 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
     let resp_impl = if has_resp {
         quote! {
-            impl #impl_generics occams_rpc_stream::server::task::ServerTaskResp for #enum_name #ty_generics #where_clause {}
+            impl #impl_generics razor_stream::server::task::ServerTaskResp for #enum_name #ty_generics #where_clause {}
 
-            impl #impl_generics occams_rpc_stream::server::task::ServerTaskEncode for #enum_name #ty_generics #where_clause {
+            impl #impl_generics razor_stream::server::task::ServerTaskEncode for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn encode_resp<'a, 'b, C: occams_rpc_stream::Codec>(
+                fn encode_resp<'a, 'b, C: razor_stream::Codec>(
                     &'a mut self,
                     codec: &C,
                     buf: &'b mut Vec<u8>,
-                ) -> (u64, Result<(usize, Option<&'a [u8]>), occams_rpc_stream::EncodedErr>) {
+                ) -> (u64, Result<(usize, Option<&'a [u8]>), razor_stream::error::EncodedErr>) {
                     match self {
                         #(#encode_arms)*
                     }
                 }
             }
 
-            impl #impl_generics occams_rpc_stream::server::task::ServerTaskDone<#resp_type, #error_type> for #enum_name #ty_generics #where_clause {
+            impl #impl_generics razor_stream::server::task::ServerTaskDone<#resp_type, #error_type> for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn _set_result(&mut self, res: Result<(), #error_type>) -> occams_rpc_stream::server::task::RespNoti<#resp_type> {
+                fn _set_result(&mut self, res: Result<(), #error_type>) -> razor_stream::server::task::RespNoti<#resp_type> {
                     match self {
                         #(#set_result_arms)*
                     }
@@ -274,9 +274,9 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
     let get_action_impl = if has_req {
         quote! {
-            impl #impl_generics occams_rpc_stream::server::task::ServerTaskAction for #enum_name #ty_generics #where_clause {
+            impl #impl_generics razor_stream::server::task::ServerTaskAction for #enum_name #ty_generics #where_clause {
                 #[inline]
-                fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
+                fn get_action<'a>(&'a self) -> razor_stream::proto::RpcAction<'a> {
                     match self {
                         #(#get_action_arms)*
                     }
@@ -317,7 +317,7 @@ fn get_action_attribute(variant: &Variant) -> Vec<NestedMeta> {
 }
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// #[server_task_enum(req)]
 /// pub struct NotAnEnum;
 /// ```
@@ -326,7 +326,7 @@ fn get_action_attribute(variant: &Variant) -> Vec<NestedMeta> {
 fn test_not_an_enum() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
@@ -343,7 +343,7 @@ fn test_not_an_enum() {}
 fn test_no_error_type() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
@@ -360,7 +360,7 @@ fn test_no_error_type() {}
 fn test_invalid_variant_field_count() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
@@ -375,7 +375,7 @@ fn test_invalid_variant_field_count() {}
 fn test_resp_and_resp_type() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
@@ -390,7 +390,7 @@ fn test_resp_and_resp_type() {}
 fn test_missing_resp_type() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMsg;
@@ -404,10 +404,10 @@ fn test_missing_resp_type() {}
 fn test_missing_action_attribute() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::server_task_enum;
-/// use occams_rpc_stream::server::task::ServerTaskVariant;
-/// use occams_rpc_stream::server::task::RespNoti;
-/// use occams_rpc_stream::proto::RpcActionOwned;
+/// use razor_stream_macros::server_task_enum;
+/// use razor_stream::server::task::ServerTaskVariant;
+/// use razor_stream::server::task::RespNoti;
+/// use razor_stream::proto::RpcActionOwned;
 /// use serde_derive::{Deserialize, Serialize};
 ///
 /// #[derive(Default, Deserialize, Serialize)]

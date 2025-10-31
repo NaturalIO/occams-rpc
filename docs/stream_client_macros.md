@@ -94,7 +94,7 @@ The macro processes specific fields within the task struct based on the `#[field
 
 *   `#[field(resp_blob)]`:
     *   **Purpose:** Designates an optional field for receiving additional binary data (a "response blob") with the RPC response.
-    *   **Requirements:** This field is optional. If present, its type *must* be `Option<T>`, where `T` implements `occams_rpc::io::AllocateBuf`. The macro implements `ClientTaskDecode::get_resp_blob_mut`, returning a mutable reference to this `Option<T>`.
+    *   **Requirements:** This field is optional. If present, its type *must* be `Option<T>`, where `T` implements `razor_rpc::io::AllocateBuf`. The macro implements `ClientTaskDecode::get_resp_blob_mut`, returning a mutable reference to this `Option<T>`.
 
 *  `#[field(res)]` and `#[field(noti)]`:
     *   **Purpose:** When both are present, the macro generates an implementation of the `ClientTaskDone` trait. This is used to signal the completion of a task and deliver its result.
@@ -111,20 +111,20 @@ The `#[client_task]` macro automatically generates the following trait implement
     *   These traits are implemented to delegate to the field marked with `#[field(common)]`, providing convenient access to its members.
 
 *   `ClientTaskEncode`:
-    *   `encode_req<C: occams_rpc::codec::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()>`: Encodes the content of the `#[field(req)]` field using the provided codec.
+    *   `encode_req<C: razor_rpc::codec::Codec>(&self, codec: &C) -> Result<Vec<u8>, ()>`: Encodes the content of the `#[field(req)]` field using the provided codec.
     *   `get_req_blob(&self) -> Option<&[u8]>`: If `#[field(req_blob)]` is present, returns a `Some` reference to the blob data; otherwise, it returns `None`.
 
 *   `ClientTaskDecode`:
-    *   `decode_resp<C: occams_rpc::codec::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()>`: Decodes the response buffer using the provided codec and stores the result in the `#[field(resp)]` field.
-    *   `get_resp_blob_mut(&mut self) -> Option<&mut impl occams_rpc::io::AllocateBuf>`: If `#[field(resp_blob)]` is present, returns a `Some` mutable reference to the response blob `Option<T>`; otherwise, it returns `None`.
+    *   `decode_resp<C: razor_rpc::codec::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()>`: Decodes the response buffer using the provided codec and stores the result in the `#[field(resp)]` field.
+    *   `get_resp_blob_mut(&mut self) -> Option<&mut impl razor_rpc::io::AllocateBuf>`: If `#[field(resp_blob)]` is present, returns a `Some` mutable reference to the response blob `Option<T>`; otherwise, it returns `None`.
 
 *   `ClientTaskDone`:
     *   This trait is implemented when `#[field(res)]` and `#[field(noti)]` are present.
     *   The generated implementation provides the following methods:
         ```rust
-        impl<E: occams_rpc_stream::RpcErrCodec> occams_rpc::stream::client::ClientTaskDone for T {
-            fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_stream::EncodedErr) { /* ... */ }
-            fn set_rpc_error(&mut self, e: occams_rpc_stream::RpcIntErr) { /* ... */ }
+        impl<E: razor_stream::error::RpcErrCodec> razor_stream::client::ClientTaskDone for T {
+            fn set_custom_error<C: razor_rpc_core::Codec>(&mut self, codec: &C, res: razor_stream::EncodedErr) { /* ... */ }
+            fn set_rpc_error(&mut self, e: razor_stream::RpcIntErr) { /* ... */ }
             fn set_ok(&mut self) { /* ... */ }
             fn done(self) { /* ... */ }
         }
@@ -148,7 +148,7 @@ The `#[client_task_enum]` will implement `From` to assist conversion from its va
 
 ## User Responsibilities
 
-Users are responsible for implementing the `occams_rpc_stream::RpcErrCodec` trait for their custom error types, which are then used with `RpcError<E>`. The framework handles calling `set_ok()`, `set_rpc_error()`, `set_custom_error()`, and `done()` to signal task completion.
+Users are responsible for implementing the `razor_stream::RpcErrCodec` trait for their custom error types, which are then used with `RpcError<E>`. The framework handles calling `set_ok()`, `set_rpc_error()`, `set_custom_error()`, and `done()` to signal task completion.
 
 If the `#[field(res)]` and `#[field(noti)]` attributes are not used, the user must implement the `ClientTaskDone` trait manually. When these attributes are used, the macro generates this implementation automatically.
 

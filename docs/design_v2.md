@@ -1,4 +1,4 @@
-# The occams-rpc design
+# The razor-rpc design
 
 ## Design goal
 

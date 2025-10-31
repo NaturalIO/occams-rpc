@@ -120,13 +120,13 @@ fn generate_client_struct(client_name: &Ident) -> proc_macro2::TokenStream {
         #[derive(Clone)]
         pub struct #client_name<C>
         where
-            C: occams_rpc::client::ClientCaller,
+            C: razor_rpc::client::ClientCaller,
             C: Clone,
             C: Sync,
             C: 'static,
-            C::Facts: occams_rpc::client::ClientFacts<Task = occams_rpc::client::task::APIClientReq>,
+            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
         {
-            pub endpoint: occams_rpc::client::AsyncEndpoint<C>,
+            pub endpoint: razor_rpc::client::AsyncEndpoint<C>,
         }
     }
 }
@@ -136,7 +136,7 @@ fn generate_client_impl(client_name: &Ident) -> proc_macro2::TokenStream {
     let new_method = quote! {
         pub fn new(caller: C) -> Self {
             Self {
-                endpoint: occams_rpc::client::AsyncEndpoint::new(caller),
+                endpoint: razor_rpc::client::AsyncEndpoint::new(caller),
             }
         }
     };
@@ -144,9 +144,9 @@ fn generate_client_impl(client_name: &Ident) -> proc_macro2::TokenStream {
     quote! {
         impl<C> #client_name<C>
         where
-            C: occams_rpc::client::ClientCaller,
+            C: razor_rpc::client::ClientCaller,
             C: Clone + Sync + 'static,
-            C::Facts: occams_rpc::client::ClientFacts<Task = occams_rpc::client::task::APIClientReq>,
+            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
         {
             #new_method
         }
@@ -282,11 +282,11 @@ fn generate_trait_impl(
             #[::async_trait::async_trait]
             impl<C> #trait_name for #client_name<C>
             where
-                C: occams_rpc::client::ClientCaller,
+                C: razor_rpc::client::ClientCaller,
                 C: Clone,
                 C: Sync,
                 C: 'static,
-                C::Facts: occams_rpc::client::ClientFacts<Task = occams_rpc::client::task::APIClientReq>,
+                C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
             {
                 #(#impl_methods)*
             }
@@ -295,11 +295,11 @@ fn generate_trait_impl(
         quote! {
             impl<C> #trait_name for #client_name<C>
             where
-                C: occams_rpc::client::ClientCaller,
+                C: razor_rpc::client::ClientCaller,
                 C: Clone,
                 C: Sync,
                 C: 'static,
-                C::Facts: occams_rpc::client::ClientFacts<Task = occams_rpc::client::task::APIClientReq>,
+                C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
             {
                 #(#impl_methods)*
             }
@@ -308,8 +308,8 @@ fn generate_trait_impl(
 }
 
 /// ```compile_fail
-/// use occams_rpc_api_macros::endpoint_async;
-/// use occams_rpc::RpcError;
+/// use razor_rpc_macros::endpoint_async;
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -334,7 +334,7 @@ fn generate_trait_impl(
 fn test_too_many_arguments_compile_fail() {}
 
 /// ```compile_fail
-/// use occams_rpc_api_macros::endpoint_async;
+/// use razor_rpc_macros::endpoint_async;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -354,8 +354,8 @@ fn test_too_many_arguments_compile_fail() {}
 fn test_invalid_return_type_compile_fail() {}
 
 /// ```compile_fail
-/// use occams_rpc_api_macros::endpoint_async;
-/// use occams_rpc::RpcError;
+/// use razor_rpc_macros::endpoint_async;
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -380,8 +380,8 @@ fn test_invalid_return_type_compile_fail() {}
 fn test_sync_method_compile_fail() {}
 
 /// ```compile_fail
-/// use occams_rpc_api_macros::endpoint_async;
-/// use occams_rpc::RpcError;
+/// use razor_rpc_macros::endpoint_async;
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Deserialize, Serialize, PartialEq)]

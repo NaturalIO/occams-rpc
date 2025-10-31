@@ -1,24 +1,24 @@
 [package]
-name = "occams-rpc-tcp"
-version = "0.2.0"
+name = "razor-rpc-tcp"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 readme = "../../README.md"
 license = "MIT"
 description = """
-The TCP/unix transport layer of occams-rpc.
-occams-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
+The TCP/unix transport layer of razor-rpc.
+razor-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 
 [dependencies]
-occams-rpc-core = {path="../../core", version=">=0.2"}
-occams-rpc-stream = {path="../../stream", version=">=0.2"}
+razor-stream = {path="../../stream", version=">=0.2"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
+orb = { version="0"}
 captains-log = ">=0.15"
 async-trait = "0.1"
 crossfire = "2.1"

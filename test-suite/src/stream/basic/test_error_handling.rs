@@ -2,9 +2,9 @@ use crate::stream::{client::*, server::*};
 use crate::*;
 use crossfire::mpsc;
 use nix::errno::Errno;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::client::{ClientConfig, task::ClientTaskGetResult};
-use occams_rpc_stream::server::{ServerConfig, task::ServerTaskDone};
+use razor_stream::client::{ClientConfig, task::ClientTaskGetResult};
+use razor_stream::error::RpcError;
+use razor_stream::server::{ServerConfig, task::ServerTaskDone};
 
 #[logfn]
 #[rstest]
@@ -13,6 +13,8 @@ use occams_rpc_stream::server::{ServerConfig, task::ServerTaskDone};
 fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
     let client_config = ClientConfig::default();
     let server_config = ServerConfig::default();
+    let rt_server = runner.rt.clone();
+    let rt_client = runner.rt.clone();
 
     let dispatch_task = move |task: FileServerTask| {
         async move {
@@ -34,13 +36,19 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
     };
 
     runner.block_on(async move {
-        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/occams-rpc-test-socket" };
-        let (_server, actual_server_addr) =
-            init_server_closure(dispatch_task, server_config.clone(), &server_bind_addr)
-                .expect("server listen");
+        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
+        let (_server, actual_server_addr) = init_server_closure::<_, _, crate::RT>(
+            dispatch_task,
+            server_config.clone(),
+            &server_bind_addr,
+            rt_server,
+        )
+        .await
+        .expect("server listen");
         debug!("client addr {:?}", actual_server_addr);
-        let mut client =
-            init_client(client_config, &actual_server_addr, None).await.expect("connect client");
+        let mut client = init_client(client_config, &actual_server_addr, None, rt_client)
+            .await
+            .expect("connect client");
 
         // Test Open task that should fail
         let (tx, rx) = mpsc::unbounded_async();

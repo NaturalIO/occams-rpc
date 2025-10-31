@@ -1,32 +1,30 @@
 use super::client::{FileAction, FileIOReq, FileIOResp, FileOpenReq};
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-#[cfg(not(feature = "tokio"))]
-use occams_rpc_smol::{ServerDefault, SmolRT};
-use occams_rpc_stream::server::{dispatch::*, task::*, *};
-use occams_rpc_tcp::TcpServer;
-#[cfg(feature = "tokio")]
-use occams_rpc_tokio::{ServerDefault, TokioRT};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpServer;
+use razor_stream::server::{dispatch::*, task::*, *};
 
-pub fn init_server(config: ServerConfig) -> RpcServer<ServerDefault> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-    let facts = ServerDefault::new(config, rt);
+pub type MyServer = razor_stream::server::ServerDefault<crate::RT>;
+
+pub fn init_server(config: ServerConfig, rt: crate::RT) -> RpcServer<MyServer> {
+    let facts = MyServer::new(config, rt);
     RpcServer::new(facts)
 }
 
-pub fn init_server_closure<H, FH>(
-    server_handle: H, config: ServerConfig, addr: &str,
-) -> Result<(RpcServer<ServerDefault>, String), std::io::Error>
+pub async fn init_server_closure<H, FH, RT>(
+    server_handle: H, config: ServerConfig, addr: &str, rt: crate::RT,
+) -> Result<(RpcServer<MyServer>, String), std::io::Error>
 where
     H: FnOnce(FileServerTask) -> FH + Send + Sync + 'static + Clone,
     FH: Future<Output = Result<(), ()>> + Send + 'static,
+    RT: orb::AsyncRuntime,
 {
-    let mut server = init_server(config);
+    // NOTE: Do not new rt to the client, pass a handle from TestRunner.
+    // since client may be drop by test logic, it's not allow
+    // to drop a tokio runtime inside async code.
+    let mut server = init_server(config, rt);
     let dispatch = new_closure_dispatcher(server_handle);
-    let local_addr = server.listen::<TcpServer<crate::RT>, _>(addr, dispatch)?;
+    let local_addr = server.listen::<TcpServer<crate::RT>, _>(addr, dispatch).await?;
     Ok((server, local_addr))
 }
 

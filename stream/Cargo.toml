@@ -1,23 +1,31 @@
 [package]
-name = "occams-rpc-stream"
-version = "0.2.0"
+name = "razor-stream"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 license = "MIT"
 readme = "../README.md"
 description = """
-The streaming interface of occams-rpc.
-occams-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
+The streaming interface of razor-rpc.
+razor-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 
 [dependencies]
-occams-rpc-core = {path="../core/", version=">=0.2"}
-occams-rpc-stream-macros = {path="macros", version=">=0.2"}
+libc = "0"
+signal-hook = "0"
+close_fds = ">=0.3.2"
+strum = {version = "0", features = ["derive"]}
+nix = "0"
+thiserror = "2"
+orb = { version="0" }
+arc-swap = "1"
+razor-rpc-codec = {path="../codec/", version=">=0.2"}
+razor-stream-macros = {path="macros", version=">=0.2"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
 futures = "0.3"
@@ -27,9 +35,13 @@ rustc-hash = "1.1"
 sync-utils = "0"
 serde = "1"
 crossfire = "2.1"
-arc-swap = "1"
+
+[dev-dependencies]
+num_enum = "0"
+serde_derive = "1"
 
 [package.metadata.docs.rs]
 all-features = true
 # enable features in the documentation
 rustdoc-args = ["--cfg", "docsrs"]
+

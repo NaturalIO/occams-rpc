@@ -1,6 +1,12 @@
 //! The module contains traits defined for the client-side
 
-pub use occams_rpc_core::ClientConfig;
+use crate::{Codec, error::RpcIntErr};
+use captains_log::filter::LogFilter;
+use crossfire::MAsyncRx;
+use std::future::Future;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{fmt, io};
 
 pub mod task;
 use task::{ClientTask, ClientTaskDone};
@@ -16,21 +22,51 @@ pub use failover::FailoverPool;
 
 mod throttler;
 
-use captains_log::filter::LogFilter;
-use crossfire::MAsyncRx;
-use occams_rpc_core::{Codec, error::RpcIntErr, runtime::AsyncIO};
-use std::future::Future;
-use std::sync::Arc;
-use std::{fmt, io};
+/// General config for client-side
+#[derive(Clone)]
+pub struct ClientConfig {
+    /// timeout of RpcTask waiting for response, in seconds.
+    pub task_timeout: usize,
+    /// socket read timeout
+    pub read_timeout: Duration,
+    /// Socket write timeout
+    pub write_timeout: Duration,
+    /// Socket idle time to be close. for connection pool.
+    pub idle_timeout: Duration,
+    /// connect timeout
+    pub connect_timeout: Duration,
+    /// How many async RpcTask in the queue, prevent overflow server capacity
+    pub thresholds: usize,
+    /// In bytes. when non-zero, overwrite the default DEFAULT_BUF_SIZE of transport
+    pub stream_buf_size: usize,
+}
+
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            task_timeout: 20,
+            read_timeout: Duration::from_secs(5),
+            write_timeout: Duration::from_secs(5),
+            idle_timeout: Duration::from_secs(120),
+            connect_timeout: Duration::from_secs(10),
+            thresholds: 128,
+            stream_buf_size: 0,
+        }
+    }
+}
 
 /// A trait implemented by the user for the client-side, to define the customizable plugin.
 ///
-/// We recommend your implementation to Deref<Target=AsyncIO> (either TokioRT or SmolRT),
-/// then the blanket trait in `occams-rpc-core` will automatically impl AsyncIO on your ClientFacts type.
-pub trait ClientFacts: AsyncIO + Send + Sync + Sized + 'static {
+/// # NOTE
+///
+/// If you choose implement this trait rather than use [ClientDefault].
+/// We recommend your implementation to Deref<Target=orb::AsyncRuntime>
+/// then the blanket trait in `orb::AsyncRuntime` will automatically impl AsyncRuntime on your ClientFacts type.
+/// Refer to the code of [ClientDefault] for example.
+pub trait ClientFacts: orb::AsyncRuntime + Send + Sync + Sized + 'static {
     /// Define the codec to serialization and deserialization
     ///
-    /// Refers to [occams_rpc_core::Codec](https://docs.rs/occams-rpc-core/latest/occams_rpc_core/trait.Codec.html)
+    /// Refers to [Codec]
     type Codec: Codec;
 
     /// Define the RPC task from client-side
@@ -99,13 +135,14 @@ impl<C: ClientCallerBlocking + Send + Sync> ClientCallerBlocking for Arc<C> {
 ///
 /// The implementation can be found on:
 ///
-/// - [occams-rpc-tcp](https://docs.rs/occams-rpc-tcp): For TCP and Unix socket
+/// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 ///
-/// NOTE: we use IO in generic param instead of ClientFacts to break cycle dep.
-/// because FailoverPool will rewrap the facts into its own.
+/// # NOTE:
+///
+/// Instead of binding this to ClientFacts,
+/// we use the associate type `RT` in generic param instead of ClientFacts to break cycle dep.
+/// because [FailoverPool] will rewrap the facts into its own.
 pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
-    type IO: AsyncIO;
-
     /// How to establish an async connection.
     ///
     /// conn_id: used for log fmt, can by the same of addr.
@@ -134,15 +171,15 @@ pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
 }
 
 /// An example ClientFacts for general use
-pub struct ClientDefault<T: ClientTask, IO: AsyncIO, C: Codec> {
+pub struct ClientDefault<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> {
     pub logger: Arc<LogFilter>,
     config: ClientConfig,
-    rt: IO,
+    rt: RT,
     _phan: std::marker::PhantomData<fn(&C, &T)>,
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientDefault<T, IO, C> {
-    pub fn new(config: ClientConfig, rt: IO) -> Arc<Self> {
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientDefault<T, RT, C> {
+    pub fn new(config: ClientConfig, rt: RT) -> Arc<Self> {
         Arc::new(Self { logger: Arc::new(LogFilter::new()), config, rt, _phan: Default::default() })
     }
 
@@ -152,14 +189,14 @@ impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientDefault<T, IO, C> {
     }
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> std::ops::Deref for ClientDefault<T, IO, C> {
-    type Target = IO;
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> std::ops::Deref for ClientDefault<T, RT, C> {
+    type Target = RT;
     fn deref(&self) -> &Self::Target {
         &self.rt
     }
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientFacts for ClientDefault<T, IO, C> {
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientFacts for ClientDefault<T, RT, C> {
     type Codec = C;
     type Task = T;
 

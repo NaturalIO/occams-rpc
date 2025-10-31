@@ -1,30 +1,24 @@
 use crossfire::*;
 use io_buffer::Buffer;
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-#[cfg(not(feature = "tokio"))]
-use occams_rpc_smol::{ClientDefault, SmolRT};
-use occams_rpc_stream::client::stream::ClientStream;
-use occams_rpc_stream::client::task::*;
-use occams_rpc_stream::client::*;
-use occams_rpc_stream::{RpcError, RpcIntErr};
-use occams_rpc_tcp::TcpClient;
-#[cfg(feature = "tokio")]
-use occams_rpc_tokio::{ClientDefault, TokioRT};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpClient;
+use razor_stream::client::stream::ClientStream;
+use razor_stream::client::task::*;
+use razor_stream::client::*;
+use razor_stream::error::{RpcError, RpcIntErr};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::{Arc, atomic::AtomicU64};
 
-pub type FileClient = ClientDefault<FileClientTask, MsgpCodec>;
+pub type MyClient = ClientDefault<FileClientTask, crate::RT, MsgpCodec>;
+
+pub type FileClient = ClientStream<MyClient, TcpClient<crate::RT>>;
 
 pub async fn init_client(
-    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>,
-) -> Result<ClientStream<FileClient, TcpClient<crate::RT>>, RpcIntErr> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-    let facts = FileClient::new(config, rt);
-    ClientStream::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
+    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>, rt: crate::RT,
+) -> Result<FileClient, RpcIntErr> {
+    let facts = MyClient::new(config, rt);
+    FileClient::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
 }
 
 #[derive(PartialEq, Debug)]
@@ -161,14 +155,12 @@ impl FileClientTaskWrite {
 }
 
 pub async fn init_failover_client(
-    config: ClientConfig, addrs: Vec<String>, round_robin: bool,
-) -> FailoverPool<FileClient, TcpClient<crate::RT>> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-
-    let facts = FileClient::new(config, rt);
+    config: ClientConfig, addrs: Vec<String>, round_robin: bool, rt: crate::RT,
+) -> FailoverPool<MyClient, TcpClient<crate::RT>> {
+    // NOTE: Do not new rt to the client, pass a handle from TestRunner.
+    // since client may be drop by test logic, it's not allow
+    // to drop a tokio runtime inside async code.
+    let facts = MyClient::new(config, rt);
     FailoverPool::new(
         facts,
         addrs,

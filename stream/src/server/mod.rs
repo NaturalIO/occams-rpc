@@ -1,28 +1,61 @@
 //! This module contains traits defined for the server-side
 //!
 
+use crate::proto::RpcAction;
+use crate::{Codec, error::*};
+use captains_log::filter::LogFilter;
+use io_buffer::Buffer;
+use orb::prelude::*;
+use std::time::Duration;
+use std::{fmt, future::Future, io, sync::Arc};
+
 pub mod task;
 use task::*;
 
 mod server;
 pub use server::RpcServer;
 
+pub mod graceful;
+
 pub mod dispatch;
 use dispatch::Dispatch;
 
-pub use occams_rpc_core::ServerConfig;
+/// General config for server-side
+#[derive(Clone)]
+pub struct ServerConfig {
+    /// socket read timeout
+    pub read_timeout: Duration,
+    /// Socket write timeout
+    pub write_timeout: Duration,
+    /// Socket idle time to be close.
+    pub idle_timeout: Duration,
+    /// wait for all connections to be close with a timeout
+    pub server_close_wait: Duration,
+    /// In bytes. when non-zero, overwrite the default DEFAULT_BUF_SIZE of transport
+    pub stream_buf_size: usize,
+}
 
-use crate::proto::RpcAction;
-use captains_log::filter::LogFilter;
-use io_buffer::Buffer;
-use occams_rpc_core::{Codec, error::*, io::*, runtime::AsyncIO};
-use std::{fmt, future::Future, io, sync::Arc};
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            read_timeout: Duration::from_secs(5),
+            write_timeout: Duration::from_secs(5),
+            idle_timeout: Duration::from_secs(120),
+            server_close_wait: Duration::from_secs(90),
+            stream_buf_size: 0,
+        }
+    }
+}
 
 /// A central hub defined by the user for the server-side, to define the customizable plugin.
 ///
-/// We recommend your implementation to Deref<Target=AsyncIO> (either TokioRT or SmolRT),
-/// then the blanket trait in `occams-rpc-core` will automatically impl AsyncIO on your ClientFacts type.
-pub trait ServerFacts: AsyncIO + Sync + Send + 'static + Sized {
+/// # NOTE
+///
+/// If you choose implement this trait rather than use [ServerDefault]
+/// We recommend your implementation to Deref<Target=orb::AsyncRuntime>
+/// then the blanket trait in `orb` crate will automatically impl AsyncRuntime on your ClientFacts type.
+/// Refer to the code of [ServerDefault] for example.
+pub trait ServerFacts: orb::AsyncRuntime + Sync + Send + 'static + Sized {
     /// You should keep ServerConfig inside, get_config() will return the reference.
     fn get_config(&self) -> &ServerConfig;
 
@@ -34,10 +67,11 @@ pub trait ServerFacts: AsyncIO + Sync + Send + 'static + Sized {
 ///
 /// The implementation can be found on:
 ///
-/// - [occams-rpc-tcp](https://docs.rs/occams-rpc-tcp): For TCP and Unix socket
+/// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 pub trait ServerTransport: Send + Sync + Sized + 'static + fmt::Debug {
-    type IO: AsyncIO;
     type Listener: AsyncListener;
+
+    fn bind(addr: &str) -> impl Future<Output = io::Result<Self::Listener>> + Send;
 
     /// The implementation is expected to store the conn_count until dropped
     fn new_conn(
@@ -118,14 +152,14 @@ impl task::ServerTaskEncode for RpcSvrResp {
 }
 
 /// An ServerFacts for general use
-pub struct ServerDefault<IO: AsyncIO> {
+pub struct ServerDefault<RT: AsyncRuntime> {
     pub logger: Arc<LogFilter>,
     config: ServerConfig,
-    rt: IO,
+    rt: RT,
 }
 
-impl<IO: AsyncIO> ServerDefault<IO> {
-    pub fn new(config: ServerConfig, rt: IO) -> Arc<Self> {
+impl<RT: AsyncRuntime> ServerDefault<RT> {
+    pub fn new(config: ServerConfig, rt: RT) -> Arc<Self> {
         Arc::new(Self { logger: Arc::new(LogFilter::new()), config, rt })
     }
 
@@ -135,14 +169,14 @@ impl<IO: AsyncIO> ServerDefault<IO> {
     }
 }
 
-impl<IO: AsyncIO> std::ops::Deref for ServerDefault<IO> {
-    type Target = IO;
+impl<RT: AsyncRuntime> std::ops::Deref for ServerDefault<RT> {
+    type Target = RT;
     fn deref(&self) -> &Self::Target {
         &self.rt
     }
 }
 
-impl<IO: AsyncIO> ServerFacts for ServerDefault<IO> {
+impl<RT: AsyncRuntime> ServerFacts for ServerDefault<RT> {
     #[inline]
     fn new_logger(&self) -> Arc<LogFilter> {
         self.logger.clone()

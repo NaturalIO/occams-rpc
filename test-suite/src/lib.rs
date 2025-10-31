@@ -4,9 +4,8 @@ pub mod stream;
 extern crate captains_log;
 extern crate log;
 pub use captains_log::logfn;
-pub use occams_rpc_core::runtime::AsyncIO;
-
 use captains_log::*;
+pub use orb::prelude::*;
 use rstest::*;
 use std::fmt;
 
@@ -14,11 +13,26 @@ use std::fmt;
 use tokio::runtime::Runtime;
 
 #[cfg(feature = "tokio")]
-pub type RT = occams_rpc_tokio::TokioRT;
+pub type RT = orb_tokio::TokioRT;
 #[cfg(not(feature = "tokio"))]
-pub type RT = occams_rpc_smol::SmolRT;
+pub type RT = orb_smol::SmolRT;
 
-pub type Codec = occams_rpc_codec::MsgpCodec;
+pub fn new_rt() -> RT {
+    #[cfg(feature = "tokio")]
+    {
+        RT::new_multi_thread(
+            std::thread::available_parallelism()
+                .unwrap_or(std::num::NonZero::new(1).unwrap())
+                .into(),
+        )
+    }
+    #[cfg(not(feature = "tokio"))]
+    {
+        RT::new_global()
+    }
+}
+
+pub type Codec = razor_rpc_codec::MsgpCodec;
 
 #[macro_export]
 macro_rules! async_spawn {
@@ -76,21 +90,13 @@ impl fmt::Debug for TestRunner {
 }
 
 pub struct TestRunner {
-    #[cfg(feature = "tokio")]
-    rt: Runtime,
+    pub rt: crate::RT,
 }
 
 impl TestRunner {
     pub fn new() -> Self {
         recipe::raw_file_logger("/tmp/rpc_test.log", Level::Trace).test().build().expect("log");
-        Self {
-            #[cfg(feature = "tokio")]
-            rt: tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(8)
-                .enable_all()
-                .build()
-                .unwrap(),
-        }
+        Self { rt: crate::new_rt() }
     }
 
     pub fn block_on<F: Future<Output = ()> + Send + 'static>(&self, f: F) {

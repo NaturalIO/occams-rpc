@@ -8,14 +8,11 @@
 //!
 //! - [`#[server_task_enum]`](macro@server_task_enum): For defining a server-side RPC task enum.
 
-pub use occams_rpc_stream_macros::server_task_enum;
+pub use razor_stream_macros::server_task_enum;
 
 use crate::proto::{RpcAction, RpcActionOwned};
+use crate::{Codec, error::*};
 use io_buffer::Buffer;
-use occams_rpc_core::{
-    Codec,
-    error::{EncodedErr, RpcErrCodec, RpcIntErr},
-};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

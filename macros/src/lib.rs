@@ -22,11 +22,11 @@ mod service_mux_struct;
 /// Without `impl Trait` (inherent implementation):
 ///
 /// ```rust
-/// use occams_rpc::server::{service, method};
-/// use occams_rpc_core::error::RpcError;
+/// use razor_rpc::server::{service, method};
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
-/// use occams_rpc::server::ServiceStatic;
-/// use occams_rpc_codec::MsgpCodec;
+/// use razor_rpc::server::ServiceStatic;
+/// use razor_rpc_codec::MsgpCodec;
 ///
 /// #[derive(Debug, Deserialize, Serialize)]
 /// pub struct AddArgs {
@@ -57,8 +57,8 @@ mod service_mux_struct;
 /// With trait implementation using `impl Future`:
 ///
 /// ```rust
-/// use occams_rpc::server::service;
-/// use occams_rpc_core::error::RpcError;
+/// use razor_rpc::server::service;
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 /// use std::future::Future;
 ///
@@ -110,8 +110,8 @@ pub fn method(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Usage
 ///
 /// ```rust
-/// use occams_rpc::server::{service, service_mux_struct, method};
-/// use occams_rpc_core::error::RpcError;
+/// use razor_rpc::server::{service, service_mux_struct, method};
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 /// use std::sync::Arc;
 ///
@@ -179,8 +179,8 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
 /// Define a service trait with the `#[endpoint_async]` attribute:
 ///
 /// ```rust
-/// use occams_rpc::client::endpoint_async;
-/// use occams_rpc_core::error::RpcError;
+/// use razor_rpc::client::endpoint_async;
+/// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 /// use std::future::Future;
 ///

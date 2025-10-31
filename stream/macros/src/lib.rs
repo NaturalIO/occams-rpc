@@ -1,6 +1,6 @@
-//! # occams-rpc-stream-macros
+//! # razor-rpc-stream-macros
 //!
-//! This crate provides procedural macros to simplify the implementation of RPC tasks for the [`occams-rpc`](https://docs.rs/occams-rpc) framework.
+//! This crate provides procedural macros to simplify the implementation of RPC tasks for the [`razor-rpc`](https://docs.rs/razor-rpc) framework.
 //! These macros automatically generate boilerplate code for trait implementations, reducing manual effort and improving code clarity.
 //!
 //! # Provided Macros
@@ -43,23 +43,23 @@ mod server_task_enum;
 ///
 /// * `#[field(req_blob)]`: (Optional) Marks a field for an optional request blob. Must implement `AsRef<[u8]>`.
 ///
-/// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `occams_rpc_core::io::AllocateBuf`.
+/// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `razor_stream::buffer::AllocateBuf`.
 ///
 /// * `#[field(res)]`: (Optional) When used with `#[field(noti)]`, triggers automatic `ClientTaskDone` implementation.
-///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `occams_rpc_core::error::RpcErrCodec`. Stores the final result of the task.
+///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `razor_stream::error::RpcErrCodec`. Stores the final result of the task.
 ///
 /// * `#[field(noti)]`: (Optional) When used with `#[field(res)]`, triggers automatic `ClientTaskDone` implementation.
 ///   Must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`) to notify of task completion.
 ///
 /// ### Example of Automatic `ClientTaskDone`
 ///
-/// ```rust
-/// use occams_rpc_stream::RpcError;
+/// ```
+/// use razor_stream::error::RpcError;
 /// use nix::errno::Errno;
-/// use occams_rpc_stream_macros::client_task;
+/// use razor_stream_macros::client_task;
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
-/// use occams_rpc_stream::client::task::*;
+/// use razor_stream::client::task::*;
 ///
 /// #[derive(Debug, Default, Deserialize, Serialize)]
 /// pub struct FileReadReq {
@@ -122,7 +122,7 @@ pub fn client_task(
 /// from a specific task struct to the enum. It also delegates methods from `ClientTask`,
 /// `ClientTaskEncode`, and `ClientTaskDecode` to the inner task.
 ///
-/// `client_task_enum` also require `error` flag, specified the custom error type for [RpcError<E: RpcErrCodec>](crate::RpcError)
+/// `client_task_enum` also require `error` flag, specified the custom error type for [RpcError<E: RpcErrCodec>](crate::error::RpcError)
 ///
 /// ### `#[action]` on enum variants
 ///
@@ -136,10 +136,10 @@ pub fn client_task(
 /// ### Example:
 ///
 /// ```rust
-/// use occams_rpc_stream::client::task::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
-/// use occams_rpc_stream::RpcError;
+/// use razor_stream::client::task::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
+/// use razor_stream::error::RpcError;
 /// use nix::errno::Errno;
-/// use occams_rpc_stream_macros::{client_task, client_task_enum};
+/// use razor_stream_macros::{client_task, client_task_enum};
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
 ///
@@ -201,7 +201,7 @@ pub fn client_task(
 /// };
 ///
 /// let mut file_task: FileTask = open_task.into();
-/// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(1));
+/// assert_eq!(file_task.get_action(), razor_stream::proto::RpcAction::Num(1));
 /// file_task.set_ok();
 /// file_task.done();
 ///
@@ -218,7 +218,7 @@ pub fn client_task(
 /// };
 ///
 /// let mut file_task: FileTask = close_task.into();
-/// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(2));
+/// assert_eq!(file_task.get_action(), razor_stream::proto::RpcAction::Num(2));
 /// file_task.set_ok();
 /// file_task.done();
 ///
@@ -247,7 +247,7 @@ pub fn client_task_enum(
 /// - If both `req` and `resp` is specified, the response type for `ServerTaskDecode<R>` and `ServerTaskDone<R>` is implicitly `Self` (the enum itself). `resp_type` can be omitted.
 /// - If only "req" is specified (and "resp" is not), then `resp_type` must be provided. This `resp_type` specifies the type `<R>` for parameters of `ServerTaskDecode<R>` and `ServerTaskDone<R>`.
 ///
-/// `server_task_enum` also requires `error` flag, specified the custom error type for [RpcError<E: RpcErrCodec>](crate::RpcError)
+/// `server_task_enum` also requires `error` flag, specified the custom error type for [RpcError<E: RpcErrCodec>](crate::error::RpcError)
 ///
 /// ### Variant Attributes:
 ///
@@ -258,8 +258,8 @@ pub fn client_task_enum(
 /// ### Example:
 ///
 /// ```rust
-/// use occams_rpc_stream::server::task::ServerTaskVariant;
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream::server::task::ServerTaskVariant;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// use nix::errno::Errno;
 ///

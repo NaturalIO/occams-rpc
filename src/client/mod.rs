@@ -1,17 +1,17 @@
 pub mod task;
-pub use occams_rpc_api_macros::endpoint_async;
-pub use occams_rpc_stream::client::ClientCaller;
+pub use razor_rpc_macros::endpoint_async;
+pub use razor_stream::client::ClientCaller;
 pub use task::*;
 
-use occams_rpc_core::Codec;
-use occams_rpc_core::error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr};
-pub use occams_rpc_stream::client::{
+use crate::Codec;
+use crate::error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr};
+pub use razor_stream::client::{
     ClientCallerBlocking, ClientConfig, ClientFacts, ClientPool, ClientTransport, FailoverPool,
 };
 use std::fmt;
 use std::sync::Arc;
 
-pub type APIClientDefault<IO, C> = occams_rpc_stream::client::ClientDefault<APIClientReq, IO, C>;
+pub type APIClientDefault<IO, C> = razor_stream::client::ClientDefault<APIClientReq, IO, C>;
 
 pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
     fn create_pool_async<T: ClientTransport>(self: Arc<Self>, addr: &str) -> ClientPool<Self, T> {

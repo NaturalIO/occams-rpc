@@ -2,15 +2,15 @@
 
 ## Overview
 
-The `#[server_task_enum]` is a procedural attribute macro designed to streamline the creation of server-side task enums in `occams-rpc`. It automates the implementation of several key traits required for processing RPC requests, reducing boilerplate and improving code maintainability.
+The `#[server_task_enum]` is a procedural attribute macro designed to streamline the creation of server-side task enums in `razor-rpc`. It automates the implementation of several key traits required for processing RPC requests, reducing boilerplate and improving code maintainability.
 
 When applied to an enum, this macro generates implementations for `ServerTaskDecode`, `ServerTaskEncode`, and `ServerTaskDone`, as well as `From` implementations for each variant's inner type.
 
 ## Usage
 
 ```rust
-use occams_rpc::stream::server::{ServerTaskDecode, ServerTaskEncode, ServerTaskDone};
-use occams_rpc_macros::server_task_enum;
+use razor_rpc::stream::server::{ServerTaskDecode, ServerTaskEncode, ServerTaskDone};
+use razor_rpc_macros::server_task_enum;
 
 // Define your subtypes for each task
 struct SubTask1;

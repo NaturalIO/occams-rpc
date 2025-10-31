@@ -1,19 +1,11 @@
 pub use super::service::{CalClient, EchoClient};
-use occams_rpc::client::*;
-use occams_rpc_core::{ClientConfig, Codec};
-use occams_rpc_tcp::TcpClient;
+use razor_rpc::Codec;
+use razor_rpc::client::*;
+use razor_rpc_tcp::TcpClient;
 
-#[cfg(not(feature = "tokio"))]
-use occams_rpc_smol::{ClientDefault, SmolRT};
-#[cfg(feature = "tokio")]
-use occams_rpc_tokio::{ClientDefault, TokioRT};
+pub type APIClient<C> = razor_stream::client::ClientDefault<APIClientReq, crate::RT, C>;
 
-#[cfg(feature = "tokio")]
-pub type APIClientDefault<C> = occams_rpc_tokio::ClientDefault<APIClientReq, C>;
-#[cfg(all(not(feature = "tokio"), feature = "smol"))]
-pub type APIClientDefault<C> = occams_rpc_smol::ClientDefault<APIClientReq, C>;
-
-pub type PoolCaller<C> = ClientPool<APIClientDefault<C>, TcpClient<crate::RT>>;
+pub type PoolCaller<C> = ClientPool<APIClient<C>, TcpClient<crate::RT>>;
 
 pub struct MyClient<C: Codec> {
     pub cal: CalClient<PoolCaller<C>>,
@@ -21,12 +13,12 @@ pub struct MyClient<C: Codec> {
 }
 
 impl<C: Codec> MyClient<C> {
-    pub fn new(config: ClientConfig, addr: &str) -> Self {
-        #[cfg(feature = "tokio")]
-        let rt = TokioRT::new(tokio::runtime::Handle::current());
-        #[cfg(not(feature = "tokio"))]
-        let rt = SmolRT::new_global();
-        let facts = ClientDefault::<APIClientReq, C>::new(config, rt);
+    pub fn new(config: ClientConfig, addr: &str, rt: crate::RT) -> Self {
+        // NOTE: Do not new rt to the client, pass a handle from TestRunner.
+        // since client may be drop by test logic, it's not allow
+        // to drop a tokio runtime inside async code.
+
+        let facts = APIClient::<C>::new(config, rt);
         let pool = facts.clone().create_pool_async::<TcpClient<crate::RT>>(addr);
         let cal = CalClient::new(pool.clone());
         let echo = EchoClient::new(pool.clone());

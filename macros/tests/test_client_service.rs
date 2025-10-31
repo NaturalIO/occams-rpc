@@ -1,13 +1,16 @@
-use occams_rpc::client::ClientCaller;
-use occams_rpc::client::task::APIClientReq;
-use occams_rpc::{Codec, RpcError};
-use occams_rpc_api_macros::endpoint_async;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_stream::client::task::{
+use razor_rpc::client::ClientCaller;
+use razor_rpc::client::task::APIClientReq;
+use razor_rpc::{
+    Codec,
+    error::{RpcError, RpcIntErr},
+};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_macros::endpoint_async;
+use razor_stream::client::ClientDefault;
+use razor_stream::client::task::{
     ClientTaskAction, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
 };
-use occams_rpc_stream::proto::RpcAction;
-use occams_rpc_tokio::ClientDefault;
+use razor_stream::proto::RpcAction;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -31,7 +34,7 @@ impl MockCaller {
 }
 
 impl ClientCaller for MockCaller {
-    type Facts = ClientDefault<APIClientReq, MsgpCodec>;
+    type Facts = ClientDefault<APIClientReq, orb_tokio::TokioRT, MsgpCodec>;
 
     async fn send_req(&self, mut task: APIClientReq) {
         println!("Sending request: {:?}", task);
@@ -56,7 +59,7 @@ impl ClientCaller for MockCaller {
             }
             "MyTestService.no_args" => codec.encode(&()).unwrap(),
             "MyTestService.error_method" => {
-                task.set_rpc_error(occams_rpc_core::error::RpcIntErr::Method);
+                task.set_rpc_error(RpcIntErr::Method);
                 task.done();
                 return;
             }
@@ -245,7 +248,7 @@ async fn test_endpoint_async_macro_with_error() {
     let result = client.error_method(AddArgs { a: 1, b: 2 }).await;
     assert!(result.is_err());
     match result {
-        Err(RpcError::Rpc(occams_rpc_core::error::RpcIntErr::Method)) => {}
+        Err(RpcError::Rpc(RpcIntErr::Method)) => {}
         _ => panic!("Expected RpcIntErr::Method error"),
     }
 }

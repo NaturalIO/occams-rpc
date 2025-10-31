@@ -5,11 +5,11 @@ use crate::api::server::{
 };
 use crate::*;
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::ClientConfig;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::server::ServerConfig;
-use occams_rpc_tcp::TcpServer;
+use razor_rpc::client::ClientConfig;
+use razor_rpc::error::RpcError;
+use razor_rpc::server::ServerConfig;
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpServer;
 
 // Import the service traits to make the methods available
 use crate::api::service::{CalService, EchoService};
@@ -21,6 +21,8 @@ use crate::api::service::{CalService, EchoService};
 #[case(true, "service_mux_struct")]
 #[case(false, "service_mux_struct")]
 fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispatch_type: String) {
+    let rt_server = runner.rt.clone();
+    let rt_client = runner.rt.clone();
     runner.block_on(async move {
         let client_config = ClientConfig::default();
         let server_config = ServerConfig::default();
@@ -33,14 +35,14 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            format!("/tmp/occams-rpc-test-api-socket-{}-{}", dispatch_type, timestamp)
+            format!("/tmp/razor-rpc-test-api-socket-{}-{}", dispatch_type, timestamp)
         };
 
         let cal_server = CalServer {};
         let echo_server = EchoServer {};
 
         // Create server
-        let mut server = create_api_server(server_config.clone());
+        let mut server = create_api_server(server_config.clone(), rt_server);
 
         let (_server, actual_server_addr) = match dispatch_type.as_str() {
             "service_mux_dyn" => {
@@ -48,6 +50,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
                 let dispatch = create_service_mux_dispatch(cal_server, echo_server);
                 let actual_addr = server
                     .listen::<TcpServer<crate::RT>, _>(&server_bind_addr, dispatch)
+                    .await
                     .expect("server listen");
                 (server, actual_addr)
             }
@@ -56,6 +59,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
                 let dispatch = create_service_mux_struct_dispatch(cal_server, echo_server);
                 let actual_addr = server
                     .listen::<TcpServer<crate::RT>, _>(&server_bind_addr, dispatch)
+                    .await
                     .expect("server listen");
                 (server, actual_addr)
             }
@@ -64,7 +68,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
 
         debug!("API server addr {:?}", actual_server_addr);
 
-        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr);
+        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr, rt_client);
 
         // Test CalService methods
         // Test inc method

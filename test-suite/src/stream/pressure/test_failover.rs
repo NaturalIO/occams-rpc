@@ -1,8 +1,8 @@
 use crate::stream::{client::*, server::*};
 use crate::*;
 use crossfire::mpsc;
-use occams_rpc_stream::client::{ClientCaller, ClientConfig, task::ClientTaskGetResult};
-use occams_rpc_stream::server::{ServerConfig, task::ServerTaskDone};
+use razor_stream::client::{ClientCaller, ClientConfig, task::ClientTaskGetResult};
+use razor_stream::server::{ServerConfig, task::ServerTaskDone};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -14,6 +14,8 @@ use std::time::Duration;
 #[case(true)] // round_robin
 #[case(false)] // not round_robin
 fn test_failover_on_server_exit(runner: TestRunner, #[case] round_robin: bool) {
+    let rt_server = runner.rt.clone();
+    let rt_client = runner.rt.clone();
     runner.block_on(async move {
         let client_config = ClientConfig::default();
         let server_config = ServerConfig::default();
@@ -67,22 +69,33 @@ fn test_failover_on_server_exit(runner: TestRunner, #[case] round_robin: bool) {
         };
 
         let is_tcp = true;
+        let _rt_server = rt_server.clone();
         // Start server 1
-        let server_bind_addr1 = if is_tcp { "127.0.0.1:0" } else { "/tmp/occams-rpc-failover-1" };
-        let (server1, server1_addr) =
-            init_server_closure(dispatch_task1, server_config.clone(), &server_bind_addr1)
-                .expect("server1 listen");
+        let server_bind_addr1 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-failover-1" };
+        let (server1, server1_addr) = init_server_closure::<_, _, crate::RT>(
+            dispatch_task1,
+            server_config.clone(),
+            &server_bind_addr1,
+            _rt_server,
+        )
+        .await
+        .expect("server1 listen");
 
         // Start server 2
-        let server_bind_addr2 = if is_tcp { "127.0.0.1:0" } else { "/tmp/occams-rpc-failover-2" };
-        let (_server2, server2_addr) =
-            init_server_closure(dispatch_task2, server_config.clone(), &server_bind_addr2)
-                .expect("server2 listen");
+        let server_bind_addr2 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-failover-2" };
+        let (_server2, server2_addr) = init_server_closure::<_, _, crate::RT>(
+            dispatch_task2,
+            server_config.clone(),
+            &server_bind_addr2,
+            rt_server,
+        )
+        .await
+        .expect("server2 listen");
         println!("server1 {} server2 {}", server1_addr, server2_addr);
 
         // Create failover client (without round-robin for clearer failover behavior)
         let addrs = vec![server1_addr.clone(), server2_addr.clone()];
-        let client = init_failover_client(client_config, addrs, round_robin).await;
+        let client = init_failover_client(client_config, addrs, round_robin, rt_client).await;
 
         // Send some requests to establish connection to server 1 (primary)
         let (tx, rx) = mpsc::unbounded_async();

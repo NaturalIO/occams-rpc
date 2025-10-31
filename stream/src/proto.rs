@@ -39,7 +39,7 @@
 ///
 use crate::client::task::ClientTask;
 use crate::server::task::ServerTaskEncode;
-use occams_rpc_core::{Codec, error::*};
+use crate::{Codec, error::*};
 use std::fmt;
 use std::io::Write;
 use std::mem::size_of;

@@ -1,12 +1,14 @@
 use super::service::*;
 use nix::errno::Errno;
-use occams_rpc::server::service;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::server::{RpcServer, ServerConfig};
-use occams_rpc_tcp::TcpServer;
+use razor_rpc::error::RpcError;
+use razor_rpc::server::{ServiceMuxDyn, dispatch::Inline, service, service_mux_struct};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpServer;
+use razor_stream::server::{RpcServer, ServerConfig};
 use rstest::*;
 use std::sync::Arc;
+
+pub type APIServer = razor_rpc::server::ServerDefault<crate::RT>;
 
 #[derive(Clone, Debug)]
 pub struct CalServer();
@@ -47,33 +49,20 @@ impl EchoService for EchoServer {
 }
 
 // Create an API server with the given services
-pub fn create_api_server(
-    config: ServerConfig,
-) -> RpcServer<occams_rpc::server::ServerDefault<crate::RT>> {
-    use occams_rpc::server::ServerDefault;
-
-    #[cfg(feature = "tokio")]
-    let rt = crate::RT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = crate::RT::new_global();
-
-    let facts = ServerDefault::new(config, rt);
+pub fn create_api_server(config: ServerConfig, rt: crate::RT) -> RpcServer<APIServer> {
+    // NOTE: Do not new rt to the client, pass a handle from TestRunner.
+    // since client may be drop by test logic, it's not allow
+    // to drop a tokio runtime inside async code.
+    let facts = APIServer::new(config, rt);
     let server = RpcServer::new(facts);
-
     server
 }
 
 // Add services to the server and start listening
-pub fn listen_with_services(
-    mut server: RpcServer<occams_rpc::server::ServerDefault<crate::RT>>, bind_addr: &str,
-    cal_server: CalServer, echo_server: EchoServer,
-) -> Result<
-    (RpcServer<occams_rpc::server::ServerDefault<crate::RT>>, String),
-    Box<dyn std::error::Error>,
-> {
-    use occams_rpc::server::ServiceMuxDyn;
-    use occams_rpc::server::dispatch::Inline;
-
+pub async fn listen_with_services(
+    mut server: RpcServer<APIServer>, bind_addr: &str, cal_server: CalServer,
+    echo_server: EchoServer,
+) -> Result<(RpcServer<APIServer>, String), Box<dyn std::error::Error>> {
     // Create service mux and add services
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
     service_mux.add(Arc::new(cal_server));
@@ -83,7 +72,7 @@ pub fn listen_with_services(
     let dispatch = Inline::new(Arc::new(service_mux));
 
     // Listen on the address
-    let actual_addr = server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch)?;
+    let actual_addr = server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch).await?;
 
     Ok((server, actual_addr))
 }
@@ -102,9 +91,7 @@ pub fn echo_server() -> EchoServer {
 // Create service mux dynamic dispatch
 pub fn create_service_mux_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl occams_rpc_stream::server::dispatch::Dispatch {
-    use occams_rpc::server::{ServiceMuxDyn, dispatch::Inline};
-
+) -> impl razor_stream::server::dispatch::Dispatch {
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
     service_mux.add(Arc::new(cal_server));
     service_mux.add(Arc::new(echo_server));
@@ -115,11 +102,7 @@ pub fn create_service_mux_dispatch(
 // Create service mux struct dispatch
 pub fn create_service_mux_struct_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl occams_rpc_stream::server::dispatch::Dispatch {
-    use occams_rpc::server::dispatch::Inline;
-    use occams_rpc::server::service_mux_struct;
-    use std::sync::Arc;
-
+) -> impl razor_stream::server::dispatch::Dispatch {
     #[service_mux_struct]
     #[derive(Clone)]
     struct TestServiceMux {
@@ -134,9 +117,6 @@ pub fn create_service_mux_struct_dispatch(
 
 // Fixture that returns a service mux dispatch
 #[fixture]
-pub fn service_mux_dispatch() -> occams_rpc::server::ServiceMuxDyn<MsgpCodec> {
-    use occams_rpc::server::ServiceMuxDyn;
-
-    // Create service mux
+pub fn service_mux_dispatch() -> ServiceMuxDyn<MsgpCodec> {
     ServiceMuxDyn::<MsgpCodec>::new()
 }

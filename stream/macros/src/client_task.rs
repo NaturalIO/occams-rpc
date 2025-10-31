@@ -135,7 +135,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
             #[inline]
             fn reserve_resp_blob(&mut self, size: i32) -> Option<&mut [u8]> {
-                occams_rpc_core::io::AllocateBuf::reserve(&mut self.#resp_blob_field_name, size)
+                razor_stream::buffer::AllocateBuf::reserve(&mut self.#resp_blob_field_name, size)
             }
         }
     } else {
@@ -146,10 +146,10 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         let action_conversion = if let Type::Path(type_path) = &f_action_type {
             if let Some(segment) = type_path.path.segments.last() {
                 if segment.ident == "String" {
-                    quote! { occams_rpc_stream::proto::RpcAction::Str(&self.#f_action_name) }
+                    quote! { razor_stream::proto::RpcAction::Str(&self.#f_action_name) }
                 } else {
                     // Assume numeric or enum
-                    quote! { occams_rpc_stream::proto::RpcAction::Num(self.#f_action_name as i32) }
+                    quote! { razor_stream::proto::RpcAction::Num(self.#f_action_name as i32) }
                 }
             } else {
                 panic!("Unsupported type for #[field(action)]");
@@ -159,9 +159,9 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         quote! {
-            impl #impl_generics_for_impl occams_rpc_stream::client::task::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
+            impl #impl_generics_for_impl razor_stream::client::task::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 #[inline]
-                fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
+                fn get_action<'a>(&'a self) -> razor_stream::proto::RpcAction<'a> {
                     #action_conversion
                 }
             }
@@ -170,24 +170,24 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         let action_token_stream = match s_action {
             NestedMeta::Lit(syn::Lit::Str(s)) => {
                 let action_str = s.value();
-                quote! { occams_rpc_stream::proto::RpcAction::Str(#action_str) }
+                quote! { razor_stream::proto::RpcAction::Str(#action_str) }
             }
             NestedMeta::Lit(syn::Lit::Int(i)) => {
                 let action_int =
                     i.base10_parse::<i32>().expect("Invalid integer literal for action");
-                quote! { occams_rpc_stream::proto::RpcAction::Num(#action_int) }
+                quote! { razor_stream::proto::RpcAction::Num(#action_int) }
             }
             NestedMeta::Meta(syn::Meta::Path(p)) => {
-                quote! { occams_rpc_stream::proto::RpcAction::Num(#p as i32) }
+                quote! { razor_stream::proto::RpcAction::Num(#p as i32) }
             }
             _ => panic!(
                 "Unsupported action type in #[action(...)]. Only string/integer literals and enum variants are supported."
             ),
         };
         quote! {
-            impl #impl_generics_for_impl occams_rpc_stream::client::task::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
+            impl #impl_generics_for_impl razor_stream::client::task::ClientTaskAction for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 #[inline]
-                fn get_action<'a>(&'a self) -> occams_rpc_stream::proto::RpcAction<'a> {
+                fn get_action<'a>(&'a self) -> razor_stream::proto::RpcAction<'a> {
                     #action_token_stream
                 }
             }
@@ -331,41 +331,41 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         quote! {
-            impl #impl_generics occams_rpc_stream::client::task::ClientTaskGetResult<#error_type> for #struct_name #ty_generics #where_clause {
+            impl #impl_generics razor_stream::client::task::ClientTaskGetResult<#error_type> for #struct_name #ty_generics #where_clause {
                 #[inline]
-                fn get_result(&self) -> Result<(), &occams_rpc_core::error::RpcError<#error_type>> {
+                fn get_result(&self) -> Result<(), &razor_stream::error::RpcError<#error_type>> {
                     match self.#res_field_name.as_ref() {
                         Some(Ok(())) => Ok(()),
                         Some(Err(e)) => Err(e),
-                        None => Err(&occams_rpc_core::error::RpcError::Rpc(occams_rpc_core::error::RpcIntErr::Internal)),
+                        None => Err(&razor_stream::error::RpcError::Rpc(razor_stream::error::RpcIntErr::Internal)),
                     }
                 }
             }
 
-            impl #impl_generics occams_rpc_stream::client::task::ClientTaskDone for #struct_name #ty_generics #where_clause_with_into {
+            impl #impl_generics razor_stream::client::task::ClientTaskDone for #struct_name #ty_generics #where_clause_with_into {
                 #[inline]
-                fn set_custom_error<C: occams_rpc_core::Codec>(&mut self, codec: &C, res: occams_rpc_core::error::EncodedErr) {
+                fn set_custom_error<C: razor_stream::Codec>(&mut self, codec: &C, res: razor_stream::error::EncodedErr) {
                     let rpc_error = match res {
-                        occams_rpc_core::error::EncodedErr::Rpc(e) => e.into(),
-                        occams_rpc_core::error::EncodedErr::Num(n) => {
-                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Ok(n as u32)) {
+                        razor_stream::error::EncodedErr::Rpc(e) => e.into(),
+                        razor_stream::error::EncodedErr::Num(n) => {
+                            if let Ok(e) = <#error_type as razor_stream::error::RpcErrCodec>::decode(codec, Ok(n as u32)) {
                                 e.into()
                             } else {
-                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                                razor_stream::error::RpcIntErr::Decode.into()
                             }
                         }
-                        occams_rpc_core::error::EncodedErr::Static(s) => {
-                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Err(s.as_bytes())) {
+                        razor_stream::error::EncodedErr::Static(s) => {
+                            if let Ok(e) = <#error_type as razor_stream::error::RpcErrCodec>::decode(codec, Err(s.as_bytes())) {
                                 e.into()
                             } else {
-                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                                razor_stream::error::RpcIntErr::Decode.into()
                             }
                         }
-                        occams_rpc_core::error::EncodedErr::Buf(b) => {
-                            if let Ok(e) = <#error_type as occams_rpc_core::error::RpcErrCodec>::decode(codec, Err(&b)) {
+                        razor_stream::error::EncodedErr::Buf(b) => {
+                            if let Ok(e) = <#error_type as razor_stream::error::RpcErrCodec>::decode(codec, Err(&b)) {
                                 e.into()
                             } else {
-                                occams_rpc_core::error::RpcIntErr::Decode.into()
+                                razor_stream::error::RpcIntErr::Decode.into()
                             }
                         }
                     };
@@ -373,7 +373,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                fn set_rpc_error(&mut self, e: occams_rpc_core::error::RpcIntErr) {
+                fn set_rpc_error(&mut self, e: razor_stream::error::RpcIntErr) {
                     self.#res_field_name = Some(Err(e.into()));
                 }
 
@@ -434,18 +434,18 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
 
-        impl #impl_generics_for_impl occams_rpc_stream::client::task::ClientTaskEncode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
+        impl #impl_generics_for_impl razor_stream::client::task::ClientTaskEncode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
-            fn encode_req<C: occams_rpc_core::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
+            fn encode_req<C: razor_stream::Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()> {
                 codec.encode_into(&self.#req_field_name, buf)
             }
 
             #get_req_blob_body
         }
 
-        impl #impl_generics_for_impl occams_rpc_stream::client::task::ClientTaskDecode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
+        impl #impl_generics_for_impl razor_stream::client::task::ClientTaskDecode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
-            fn decode_resp<C: occams_rpc_core::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
+            fn decode_resp<C: razor_stream::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
                 let resp = codec.decode(buffer)?;
                 self.#resp_field_name = Some(resp);
                 Ok(())
@@ -458,11 +458,11 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::*;
+/// use razor_stream_macros::*;
 /// #[client_task]
 /// pub struct FileTaskWrongResp {
 ///     #[field(common)]
-///     common: occams_rpc_stream::client::task::ClientTaskCommon,
+///     common: razor_stream::client::task::ClientTaskCommon,
 ///     #[field(req)]
 ///     req: (),
 ///     #[field(resp)]
@@ -474,11 +474,11 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 fn test_resp_not_option() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::*;
+/// use razor_stream_macros::*;
 /// #[client_task]
 /// pub struct FileTaskNoReq {
 ///     #[field(common)]
-///     common: occams_rpc_stream::client::task::ClientTaskCommon,
+///     common: razor_stream::client::task::ClientTaskCommon,
 ///     #[field(resp)]
 ///     resp: Option<()>,
 /// }
@@ -488,11 +488,11 @@ fn test_resp_not_option() {}
 fn test_missing_req() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::*;
+/// use razor_stream_macros::*;
 /// #[client_task]
 /// pub struct FileTaskNoResp {
 ///     #[field(common)]
-///     common: occams_rpc_stream::client::task::ClientTaskCommon,
+///     common: razor_stream::client::task::ClientTaskCommon,
 ///     #[field(req)]
 ///     req: (),
 /// }
@@ -502,9 +502,9 @@ fn test_missing_req() {}
 fn test_missing_resp() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::*;
-/// use occams_rpc_stream::client::task::ClientTaskCommon;
-/// use occams_rpc_core::error::RpcError;
+/// use razor_stream_macros::*;
+/// use razor_stream::client::task::ClientTaskCommon;
+/// use razor_stream::error::RpcError;
 /// use nix::errno::Errno;
 ///
 /// #[client_task]
@@ -523,8 +523,8 @@ fn test_missing_resp() {}
 fn test_missing_noti_field() {}
 
 /// ```compile_fail
-/// use occams_rpc_stream_macros::*;
-/// use occams_rpc_stream::client::task::ClientTaskCommon;
+/// use razor_stream_macros::*;
+/// use razor_stream::client::task::ClientTaskCommon;
 /// use crossfire::MTx;
 ///
 /// #[client_task]

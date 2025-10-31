@@ -13,9 +13,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::io::AsyncListener;
 use close_fds::set_fds_cloexec;
 use log::*;
+use orb::prelude::*;
 use signal_hook::iterator::Signals;
 
 /// Write pid file for current process
@@ -140,7 +140,7 @@ impl GracefulServer {
 
     /// Initiate socket listener which supports graceful restart.
     /// We assume the program does not change addrs, always call with the same order.
-    pub fn new_listener<L>(&mut self, addr: &str) -> std::io::Result<L>
+    pub async fn new_listener<L>(&mut self, addr: &str) -> std::io::Result<L>
     where
         L: AsyncListener + AsRawFd,
     {
@@ -164,7 +164,7 @@ impl GracefulServer {
         } else {
             warn!("no recover_listen_fds found");
         }
-        match L::bind(addr) {
+        match L::bind(addr).await {
             Err(e) => {
                 error!("graceful: failed to listen {} {}", type_name::<L>(), addr);
                 return Err(e);

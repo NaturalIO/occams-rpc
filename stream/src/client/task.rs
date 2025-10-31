@@ -6,14 +6,14 @@
 //! - [`#[client_task_enum]`](macro@client_task_enum): For creating an enum that delegates to client task variants. It will generate ClientTask trait for the enum
 
 use crate::proto::RpcAction;
-use occams_rpc_core::{
+use crate::{
     Codec,
     error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr},
 };
 use std::fmt;
 use std::ops::DerefMut;
 
-pub use occams_rpc_stream_macros::{client_task, client_task_enum};
+pub use razor_stream_macros::{client_task, client_task_enum};
 
 /// Sum up trait for client task, including request and response
 pub trait ClientTask:
