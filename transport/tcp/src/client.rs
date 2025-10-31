@@ -1,14 +1,14 @@
-use crate::net::{UnifyAddr, UnifyStream};
 use captains_log::filter::LogFilter;
 use crossfire::MAsyncRx;
 use io_buffer::Buffer;
-use occams_rpc_core::io::{AsyncBufStream, AsyncRead, AsyncWrite, Cancellable, io_with_timeout};
-use occams_rpc_core::runtime::AsyncIO;
-use occams_rpc_core::{ClientConfig, error::*};
-use occams_rpc_stream::client::task::{ClientTaskDecode, ClientTaskDone};
-use occams_rpc_stream::client::timer::ClientTaskTimer;
-use occams_rpc_stream::client::{ClientFacts, ClientTransport};
-use occams_rpc_stream::proto;
+use orb::net::UnifyStream;
+use orb::prelude::*;
+use orb::{io::AsyncBufStream, utils::Cancellable};
+use razor_rpc_core::{ClientConfig, error::*};
+use razor_stream::client::task::{ClientTaskDecode, ClientTaskDone};
+use razor_stream::client::timer::ClientTaskTimer;
+use razor_stream::client::{ClientFacts, ClientTransport};
+use razor_stream::proto;
 use std::cell::UnsafeCell;
 use std::mem::transmute;
 use std::str::FromStr;
@@ -17,28 +17,28 @@ use std::{fmt, io};
 
 pub const CLIENT_DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
-pub struct TcpClient<IO: AsyncIO> {
-    stream: UnsafeCell<AsyncBufStream<UnifyStream<IO>>>,
+pub struct TcpClient<RT: AsyncRuntime> {
+    stream: UnsafeCell<AsyncBufStream<UnifyStream<RT>>>,
     resp_buf: UnsafeCell<Vec<u8>>,
     conn_id: String,
     read_timeout: Duration,
     write_timeout: Duration,
 }
 
-unsafe impl<IO: AsyncIO> Send for TcpClient<IO> {}
-unsafe impl<IO: AsyncIO> Sync for TcpClient<IO> {}
+unsafe impl<RT: AsyncRuntime> Send for TcpClient<RT> {}
+unsafe impl<RT: AsyncRuntime> Sync for TcpClient<RT> {}
 
-impl<IO: AsyncIO> fmt::Debug for TcpClient<IO> {
+impl<RT: AsyncRuntime> fmt::Debug for TcpClient<RT> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "client {}", self.conn_id)
     }
 }
 
-impl<IO: AsyncIO> TcpClient<IO> {
+impl<RT: AsyncRuntime> TcpClient<RT> {
     // Because async runtimes does not support splitting read and write to static handler,
     // we use unsafe to achieve such goal,
     #[inline(always)]
-    fn get_stream_mut(&self) -> &mut AsyncBufStream<UnifyStream<IO>> {
+    fn get_stream_mut(&self) -> &mut AsyncBufStream<UnifyStream<RT>> {
         unsafe { std::mem::transmute(self.stream.get()) }
     }
 
@@ -58,7 +58,8 @@ impl<IO: AsyncIO> TcpClient<IO> {
                 return Err(io::ErrorKind::OutOfMemory.into());
             }
             Ok(mut buf) => {
-                if let Err(e) = io_with_timeout!(IO, self.read_timeout, reader.read_exact(&mut buf))
+                if let Err(e) =
+                    crate::io_with_timeout!(RT, self.read_timeout, reader.read_exact(&mut buf))
                 {
                     logger_warn!(logger, "{:?} recv task failed: {}", self, e);
                     return Err(e);
@@ -83,7 +84,7 @@ impl<IO: AsyncIO> TcpClient<IO> {
             }
             2 => {
                 let buf = self.get_resp_buf(resp_head.blob_len.get() as usize);
-                match io_with_timeout!(IO, self.read_timeout, reader.read_exact(buf)) {
+                match crate::io_with_timeout!(RT, self.read_timeout, reader.read_exact(buf)) {
                     Err(e) => {
                         logger_warn!(logger, "{:?} recv buffer error: {}", self, e);
                         task.set_rpc_error(RpcIntErr::IO);
@@ -126,7 +127,9 @@ impl<IO: AsyncIO> TcpClient<IO> {
                 return self._recv_error(facts, logger, codec, resp_head, task).await;
             }
             if resp_head.msg_len > 0 {
-                if let Err(e) = io_with_timeout!(IO, read_timeout, reader.read_exact(read_buf)) {
+                if let Err(e) =
+                    crate::io_with_timeout!(RT, read_timeout, reader.read_exact(read_buf))
+                {
                     task.set_rpc_error(RpcIntErr::IO);
                     facts.error_handle(task);
                     return Err(e);
@@ -148,7 +151,9 @@ impl<IO: AsyncIO> TcpClient<IO> {
                     }
                     Some(buf) => {
                         // ensure buf can fit blob_len
-                        if let Err(e) = io_with_timeout!(IO, read_timeout, reader.read_exact(buf)) {
+                        if let Err(e) =
+                            crate::io_with_timeout!(RT, read_timeout, reader.read_exact(buf))
+                        {
                             logger_warn!(
                                 logger,
                                 "{:?} rpc client reader read ext_buf err: {}",
@@ -196,37 +201,16 @@ impl<IO: AsyncIO> TcpClient<IO> {
     }
 }
 
-impl<IO: AsyncIO> ClientTransport for TcpClient<IO> {
-    type IO = IO;
-
+impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     async fn connect(addr: &str, conn_id: &str, config: &ClientConfig) -> Result<Self, RpcIntErr> {
-        let connect_timeout = config.connect_timeout;
-        let stream: UnifyStream<IO> = {
-            match UnifyAddr::from_str(addr) {
+        let stream: UnifyStream<RT> =
+            match UnifyStream::<RT>::connect_timeout(addr, config.connect_timeout).await {
+                Ok(_stream) => _stream,
                 Err(e) => {
-                    error!("Cannot parsing addr {}: {}", addr, e);
+                    warn!("Cannot connect addr {}: {}", addr, e);
                     return Err(RpcIntErr::Unreachable.into());
                 }
-                Ok(UnifyAddr::Socket(_addr)) => {
-                    match IO::connect_tcp(&_addr, connect_timeout).await {
-                        Ok(stream) => UnifyStream::Tcp(stream),
-                        Err(e) => {
-                            warn!("Cannot connect addr {}: {}", addr, e);
-                            return Err(RpcIntErr::Unreachable.into());
-                        }
-                    }
-                }
-                Ok(UnifyAddr::Path(_addr)) => {
-                    match IO::connect_unix(&_addr, connect_timeout).await {
-                        Ok(stream) => UnifyStream::Unix(stream),
-                        Err(e) => {
-                            warn!("Cannot connect addr {}: {}", addr, e);
-                            return Err(RpcIntErr::Unreachable.into());
-                        }
-                    }
-                }
-            }
-        };
+            };
         let mut buf_size = config.stream_buf_size;
         if buf_size == 0 {
             buf_size = CLIENT_DEFAULT_BUF_SIZE;
@@ -252,7 +236,7 @@ impl<IO: AsyncIO> ClientTransport for TcpClient<IO> {
     #[inline(always)]
     async fn flush_req<F: ClientFacts>(&self, logger: &LogFilter) -> io::Result<()> {
         let writer = self.get_stream_mut();
-        if let Err(e) = io_with_timeout!(IO, self.write_timeout, writer.flush()) {
+        if let Err(e) = crate::io_with_timeout!(RT, self.write_timeout, writer.flush()) {
             logger_warn!(logger, "{:?} flush_req flush err: {}", self, e);
             return Err(e);
         }
@@ -275,9 +259,9 @@ impl<IO: AsyncIO> ClientTransport for TcpClient<IO> {
                 }
             }};
         }
-        io_with_timeout!(IO, write_timeout, writer.write_all(buf))?;
+        crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf))?;
         if let Some(blob_buf) = blob {
-            err_log!(io_with_timeout!(IO, write_timeout, writer.write_all(blob_buf)));
+            err_log!(crate::io_with_timeout!(RT, write_timeout, writer.write_all(blob_buf)));
         }
         if need_flush {
             self.flush_req::<F>(logger).await?;
@@ -309,9 +293,11 @@ impl<IO: AsyncIO> ClientTransport for TcpClient<IO> {
                 }
             }
         } else {
-            if let Err(e) =
-                io_with_timeout!(IO, self.read_timeout, reader.read_exact(&mut resp_head_buf))
-            {
+            if let Err(e) = crate::io_with_timeout!(
+                RT,
+                self.read_timeout,
+                reader.read_exact(&mut resp_head_buf)
+            ) {
                 logger_debug!(logger, "{:?} rpc client read resp head err: {}", self, e);
                 return Err(e.into());
             }

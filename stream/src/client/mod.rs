@@ -1,6 +1,6 @@
 //! The module contains traits defined for the client-side
 
-pub use occams_rpc_core::ClientConfig;
+pub use razor_rpc_core::ClientConfig;
 
 pub mod task;
 use task::{ClientTask, ClientTaskDone};
@@ -18,19 +18,23 @@ mod throttler;
 
 use captains_log::filter::LogFilter;
 use crossfire::MAsyncRx;
-use occams_rpc_core::{Codec, error::RpcIntErr, runtime::AsyncIO};
+use razor_rpc_core::{Codec, error::RpcIntErr};
 use std::future::Future;
 use std::sync::Arc;
 use std::{fmt, io};
 
 /// A trait implemented by the user for the client-side, to define the customizable plugin.
 ///
-/// We recommend your implementation to Deref<Target=AsyncIO> (either TokioRT or SmolRT),
-/// then the blanket trait in `occams-rpc-core` will automatically impl AsyncIO on your ClientFacts type.
-pub trait ClientFacts: AsyncIO + Send + Sync + Sized + 'static {
+/// # NOTE
+///
+/// If you choose implement this trait rather than use [ClientDefault].
+/// We recommend your implementation to Deref<Target=orb::AsyncRuntime>
+/// then the blanket trait in `orb::AsyncRuntime` will automatically impl AsyncRuntime on your ClientFacts type.
+/// Refer to the code of [ClientDefault] for example.
+pub trait ClientFacts: orb::AsyncRuntime + Send + Sync + Sized + 'static {
     /// Define the codec to serialization and deserialization
     ///
-    /// Refers to [occams_rpc_core::Codec](https://docs.rs/occams-rpc-core/latest/occams_rpc_core/trait.Codec.html)
+    /// Refers to [razor_rpc_core::Codec](https://docs.rs/razor-rpc-core/latest/razor_rpc_core/trait.Codec.html)
     type Codec: Codec;
 
     /// Define the RPC task from client-side
@@ -99,13 +103,14 @@ impl<C: ClientCallerBlocking + Send + Sync> ClientCallerBlocking for Arc<C> {
 ///
 /// The implementation can be found on:
 ///
-/// - [occams-rpc-tcp](https://docs.rs/occams-rpc-tcp): For TCP and Unix socket
+/// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 ///
-/// NOTE: we use IO in generic param instead of ClientFacts to break cycle dep.
-/// because FailoverPool will rewrap the facts into its own.
+/// # NOTE:
+///
+/// Instead of binding this to ClientFacts,
+/// we use the associate type `RT` in generic param instead of ClientFacts to break cycle dep.
+/// because [FailoverPool] will rewrap the facts into its own.
 pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
-    type IO: AsyncIO;
-
     /// How to establish an async connection.
     ///
     /// conn_id: used for log fmt, can by the same of addr.
@@ -134,15 +139,15 @@ pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
 }
 
 /// An example ClientFacts for general use
-pub struct ClientDefault<T: ClientTask, IO: AsyncIO, C: Codec> {
+pub struct ClientDefault<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> {
     pub logger: Arc<LogFilter>,
     config: ClientConfig,
-    rt: IO,
+    rt: RT,
     _phan: std::marker::PhantomData<fn(&C, &T)>,
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientDefault<T, IO, C> {
-    pub fn new(config: ClientConfig, rt: IO) -> Arc<Self> {
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientDefault<T, RT, C> {
+    pub fn new(config: ClientConfig, rt: RT) -> Arc<Self> {
         Arc::new(Self { logger: Arc::new(LogFilter::new()), config, rt, _phan: Default::default() })
     }
 
@@ -152,14 +157,14 @@ impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientDefault<T, IO, C> {
     }
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> std::ops::Deref for ClientDefault<T, IO, C> {
-    type Target = IO;
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> std::ops::Deref for ClientDefault<T, RT, C> {
+    type Target = RT;
     fn deref(&self) -> &Self::Target {
         &self.rt
     }
 }
 
-impl<T: ClientTask, IO: AsyncIO, C: Codec> ClientFacts for ClientDefault<T, IO, C> {
+impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientFacts for ClientDefault<T, RT, C> {
     type Codec = C;
     type Task = T;
 

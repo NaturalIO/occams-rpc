@@ -1,24 +1,24 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 
-//! # occams-rpc-stream
+//! # razor-rpc-stream
 //!
-//! This crate provides a low-level streaming interface for `occams-rpc`.
-//! It is used for stream processing and is part of the modular design of `occams-rpc`.
+//! This crate provides a low-level streaming interface for `razor-rpc`.
+//! It is used for stream processing and is part of the modular design of `razor-rpc`.
 //!
-//! If you are looking for a high-level remote API call interface, use [`occams-rpc`](https://docs.rs/occams-rpc) instead.
+//! If you are looking for a high-level remote API call interface, use [`razor-rpc`](https://docs.rs/razor-rpc) instead.
 //!
 //! ## Components
 //!
-//! `occams-rpc` is designed to be modular and pluggable. It is a collection of crates that provide different functionalities:
+//! `razor-rpc` is designed to be modular and pluggable. It is a collection of crates that provide different functionalities:
 //!
-//! - [`occams-rpc-core`](https://docs.rs/occams-rpc-core): A core utils crate.
-//! - [`occams-rpc-codec`](https://docs.rs/occams-rpc-codec): Provides codecs for serialization, such as `msgpack`.
+//! - [`razor-rpc-core`](https://docs.rs/razor-rpc-core): A core utils crate.
+//! - [`razor-rpc-codec`](https://docs.rs/razor-rpc-codec): Provides codecs for serialization, such as `msgpack`.
 //! - Runtimes:
-//!   - [`occams-rpc-tokio`](https://docs.rs/occams-rpc-tokio): A runtime adapter for the `tokio` runtime.
-//!   - [`occams-rpc-smol`](https://docs.rs/occams-rpc-smol): A runtime adapter for the `smol` runtime.
+//!   - [`orb-tokio`](https://docs.rs/orb-tokio): A runtime adapter for the `tokio` runtime.
+//!   - [`orb-smol`](https://docs.rs/orb-smol): A runtime adapter for the `smol` runtime.
 //! - Transports can be implemented with a raw socket, without the overhead of the HTTP protocol:
-//!   - [`occams-rpc-tcp`](https://docs.rs/occams-rpc-tcp): A TCP transport implementation.
+//!   - [`razor-rpc-tcp`](https://docs.rs/razor-rpc-tcp): A TCP transport implementation.
 //!
 //! ## The Design
 //!
@@ -61,7 +61,7 @@
 //!
 //! ## Usage
 //!
-//! You can refer to the [test case](https://github.com/NaturalIO/occams-rpc/blob/master/test-suite/src/stream/) for example.
+//! You can refer to the [test case](https://github.com/NaturalIO/razor-rpc/blob/master/test-suite/src/stream/) for example.
 //!
 
 #[macro_use]
@@ -71,5 +71,5 @@ pub mod client;
 pub mod proto;
 pub mod server;
 // re-export for macros, so that user don't need to use multiple crates
-pub use occams_rpc_core::Codec;
-pub use occams_rpc_core::error::*;
+pub use razor_rpc_core::Codec;
+pub use razor_rpc_core::error::*;

@@ -1,11 +1,11 @@
 use crossfire::{MTx, mpsc};
 use nix::errno::Errno;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::{
-    client::task::{ClientTaskAction, ClientTaskCommon, ClientTaskDone},
+use razor_rpc_core::error::RpcError;
+use razor_stream::{
+    client::task::{ClientTaskCommon, *},
     proto::RpcAction,
 };
-use occams_rpc_stream_macros::{client_task, client_task_enum};
+use razor_stream_macros::{client_task, client_task_enum};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::marker::{PhantomData, Send, Unpin};

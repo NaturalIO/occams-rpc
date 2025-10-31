@@ -1,29 +1,24 @@
 use crossfire::*;
 use io_buffer::Buffer;
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-#[cfg(not(feature = "tokio"))]
-use occams_rpc_smol::{ClientDefault, SmolRT};
-use occams_rpc_stream::client::stream::ClientStream;
-use occams_rpc_stream::client::task::*;
-use occams_rpc_stream::client::*;
-use occams_rpc_stream::{RpcError, RpcIntErr};
-use occams_rpc_tcp::TcpClient;
-#[cfg(feature = "tokio")]
-use occams_rpc_tokio::{ClientDefault, TokioRT};
+use orb::prelude::*;
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpClient;
+use razor_stream::client::stream::ClientStream;
+use razor_stream::client::task::*;
+use razor_stream::client::*;
+use razor_stream::{RpcError, RpcIntErr};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::{Arc, atomic::AtomicU64};
 
-pub type FileClient = ClientDefault<FileClientTask, MsgpCodec>;
+pub type ClientDefault = razor_stream::client::ClientDefault<FileClientTask, crate::RT, MsgpCodec>;
+
+pub type FileClient = ClientStream<ClientDefault, TcpClient<crate::RT>>;
 
 pub async fn init_client(
     config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>,
-) -> Result<ClientStream<FileClient, TcpClient<crate::RT>>, RpcIntErr> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-    let facts = FileClient::new(config, rt);
+) -> Result<FileClient, Errno> {
+    let facts = FileClient::new(config, crate::new_rt());
     ClientStream::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
 }
 
@@ -163,12 +158,7 @@ impl FileClientTaskWrite {
 pub async fn init_failover_client(
     config: ClientConfig, addrs: Vec<String>, round_robin: bool,
 ) -> FailoverPool<FileClient, TcpClient<crate::RT>> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-
-    let facts = FileClient::new(config, rt);
+    let facts = FileClient::new(config, crate::new_rt());
     FailoverPool::new(
         facts,
         addrs,

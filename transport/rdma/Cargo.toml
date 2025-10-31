@@ -1,17 +1,17 @@
 [package]
-name = "occams-rpc-rdma"
-version = "0.0.1"
+name = "razor-rpc-rdma"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 readme = "../../README.md"
 license = "MIT"
 description = """
-The rdma transport layer of occams-rpc.
-occams-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
+The rdma transport layer of razor-rpc.
+razor-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 

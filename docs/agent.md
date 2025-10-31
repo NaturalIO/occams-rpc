@@ -5,7 +5,7 @@
 # For procedure macros
 
 - All type reference in the macro should be full qualified path.
-- In order to avoid the need to use multiple crates,  all type reference in ./stream/macros/ must be in (or re-exported in) `occams-rpc-stream` crate, and the reference in ./macros/ must be in `occams-rpc` crate.
+- In order to avoid the need to use multiple crates,  all type reference in ./stream/macros/ must be in (or re-exported in) `razor-rpc-stream` crate, and the reference in ./macros/ must be in `razor-rpc` crate.
 - Add compile_fail doc test for unexpected syntax, be aware that don't add doc test in test files, doc tests only run with lib files.
 
 # For async trait

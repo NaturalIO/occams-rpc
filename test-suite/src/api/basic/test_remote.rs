@@ -5,11 +5,11 @@ use crate::api::server::{
 };
 use crate::*;
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::ClientConfig;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::server::ServerConfig;
-use occams_rpc_tcp::TcpServer;
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_core::ClientConfig;
+use razor_rpc_core::error::RpcError;
+use razor_rpc_tcp::TcpServer;
+use razor_stream::server::ServerConfig;
 
 // Import the service traits to make the methods available
 use crate::api::service::{CalService, EchoService};
@@ -33,7 +33,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            format!("/tmp/occams-rpc-test-api-socket-{}-{}", dispatch_type, timestamp)
+            format!("/tmp/razor-rpc-test-api-socket-{}-{}", dispatch_type, timestamp)
         };
 
         let cal_server = CalServer {};

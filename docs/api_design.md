@@ -31,13 +31,13 @@ will have a generic param `<C: ClientCaller<Factory: ClientFact<Task = APIClient
 
 At the client-side. there should be:
 
-- ClientStream: from occams-rpc-stream::client_impl::RpcClient.
-- ClientCaller: from occams_rpc_stream
+- ClientStream: from razor-rpc-stream::client_impl::RpcClient.
+- ClientCaller: from razor_stream
     - ClientPool: To maintain worker pool,
     - FailoverPool: loadbalance and fail over then server unreachable.
-- ClientFactsDefault: default facts that implements occams-rpc-stream::client::ClientFact
-- AsyncEndpoint: provides `async fn call`  (occams_rpc::client), a wrapper of ClientCaller. AsyncEndpoint can be clone if ClientCaller impl Clone.
-- BlockingEndpoint: provides `fn call` (occams_rpc::client)
+- ClientFactsDefault: default facts that implements razor-rpc-stream::client::ClientFact
+- AsyncEndpoint: provides `async fn call`  (razor_rpc::client), a wrapper of ClientCaller. AsyncEndpoint can be clone if ClientCaller impl Clone.
+- BlockingEndpoint: provides `fn call` (razor_rpc::client)
 
 # Server
 
@@ -94,8 +94,8 @@ The macro will iterate all methods and generate a `ServiceStatic::serve()` imple
 #### Example: Inherent `impl`
 
 ```rust
-use occams_rpc_api_macros::{method, service};
-use occams_rpc_core::error::RpcError;
+use razor_rpc_api_macros::{method, service};
+use razor_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -131,8 +131,8 @@ impl MyServiceInherentImpl {
 #### Example: Trait `impl`
 
 ```rust
-use occams_rpc_api_macros::service;
-use occams_rpc_core::error::RpcError;
+use razor_rpc_api_macros::service;
+use razor_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -167,8 +167,8 @@ Each field in the struct must hold a service that implements `ServiceStatic` (e.
 #### Example: Service Dispatcher Struct
 
 ```rust
-use occams_rpc_api_macros::{service, service_mux_struct, method};
-use occams_rpc_core::error::RpcError;
+use razor_rpc_api_macros::{service, service_mux_struct, method};
+use razor_rpc_core::error::RpcError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

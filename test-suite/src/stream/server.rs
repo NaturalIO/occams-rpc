@@ -1,28 +1,23 @@
 use super::client::{FileAction, FileIOReq, FileIOResp, FileOpenReq};
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-#[cfg(not(feature = "tokio"))]
-use occams_rpc_smol::{ServerDefault, SmolRT};
-use occams_rpc_stream::server::{dispatch::*, task::*, *};
-use occams_rpc_tcp::TcpServer;
-#[cfg(feature = "tokio")]
-use occams_rpc_tokio::{ServerDefault, TokioRT};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_tcp::TcpServer;
+use razor_stream::server::{dispatch::*, task::*, *};
+
+pub type ServerDefault = razor_stream::server::ServerDefault<crate::RT>;
 
 pub fn init_server(config: ServerConfig) -> RpcServer<ServerDefault> {
-    #[cfg(feature = "tokio")]
-    let rt = TokioRT::new(tokio::runtime::Handle::current());
-    #[cfg(not(feature = "tokio"))]
-    let rt = SmolRT::new_global();
-    let facts = ServerDefault::new(config, rt);
+    let facts = ServerDefault::new(config, crate::new_rt());
     RpcServer::new(facts)
 }
 
-pub fn init_server_closure<H, FH>(
+pub fn init_server_closure<H, FH, RT>(
     server_handle: H, config: ServerConfig, addr: &str,
-) -> Result<(RpcServer<ServerDefault>, String), std::io::Error>
+) -> Result<(RpcServer<ServerDefault<crate::RT>>, String), std::io::Error>
 where
     H: FnOnce(FileServerTask) -> FH + Send + Sync + 'static + Clone,
     FH: Future<Output = Result<(), ()>> + Send + 'static,
+    RT: orb::AsyncRuntime,
 {
     let mut server = init_server(config);
     let dispatch = new_closure_dispatcher(server_handle);

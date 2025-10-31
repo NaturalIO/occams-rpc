@@ -1,6 +1,6 @@
 use nix::errno::Errno;
-use occams_rpc::client::endpoint_async;
-use occams_rpc_core::error::RpcError;
+use razor_rpc::client::endpoint_async;
+use razor_rpc_core::error::RpcError;
 
 #[endpoint_async(CalClient)]
 #[async_trait::async_trait]

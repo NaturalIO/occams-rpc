@@ -14,7 +14,7 @@ use crate::{client::*, proto};
 use captains_log::filter::LogFilter;
 use crossfire::*;
 use futures::pin_mut;
-use occams_rpc_core::runtime::*;
+use orb::prelude::*;
 use std::time::Duration;
 use std::{
     cell::UnsafeCell,
@@ -403,7 +403,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     }
 
     async fn receive_loop(&self) {
-        let mut tick = <F as AsyncIO>::tick(Duration::from_secs(1));
+        let mut tick = <F as AsyncTime>::tick(Duration::from_secs(1));
         loop {
             let f = self.recv_some();
             pin_mut!(f);
@@ -421,7 +421,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                         // pending_task_count will not keep growing,
                         // so there is no need to sleep here.
                         timer.clean_pending_tasks(self.facts.as_ref());
-                        <F as AsyncIO>::sleep(Duration::from_secs(1)).await;
+                        <F as AsyncTime>::sleep(Duration::from_secs(1)).await;
                     }
                     return;
                 }

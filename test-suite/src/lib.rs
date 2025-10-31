@@ -4,9 +4,8 @@ pub mod stream;
 extern crate captains_log;
 extern crate log;
 pub use captains_log::logfn;
-pub use occams_rpc_core::runtime::AsyncIO;
-
 use captains_log::*;
+use orb::prelude::*;
 use rstest::*;
 use std::fmt;
 
@@ -14,11 +13,22 @@ use std::fmt;
 use tokio::runtime::Runtime;
 
 #[cfg(feature = "tokio")]
-pub type RT = occams_rpc_tokio::TokioRT;
+pub type RT = orb_tokio::TokioRT;
 #[cfg(not(feature = "tokio"))]
-pub type RT = occams_rpc_smol::SmolRT;
+pub type RT = orb_smol::SmolRT;
 
-pub type Codec = occams_rpc_codec::MsgpCodec;
+pub fn new_rt() -> RT {
+    #[cfg(feature = "tokio")]
+    {
+        TokioRT::new_multi_thread(std::thread::available_parallelism().unwrap_or(0) as usize)
+    }
+    #[cfg(not(feature = "tokio"))]
+    {
+        SmolRT::new_global()
+    }
+}
+
+pub type Codec = razor_rpc_codec::MsgpCodec;
 
 #[macro_export]
 macro_rules! async_spawn {

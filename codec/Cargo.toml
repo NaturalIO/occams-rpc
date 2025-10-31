@@ -1,22 +1,22 @@
 [package]
-name = "occams-rpc-codec"
-version = "0.2.0"
+name = "razor-rpc-codec"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 readme = "../README.md"
 license = "MIT"
 description = """
-This is the codec packages for occams_rpc.
-occams_rpc is a modular, pluggable RPC for high throughput scenario, supports various runtime,
+This is the codec packages for razor_rpc.
+razor_rpc is a modular, pluggable RPC for high throughput scenario, supports various runtime,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 
 [dependencies]
-occams-rpc-core = {path="../core", version=">=0.2"}
+razor-rpc-core = {path="../core", version=">=0.2"}
 serde = "1"
 rmp-serde = {version=">=1.1.1", optional=true}
 log = "0.4"

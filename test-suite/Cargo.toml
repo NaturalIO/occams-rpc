@@ -1,17 +1,19 @@
 [package]
-name = "occams-rpc-test"
+name = "razor-rpc-test"
+version = "0.2.13"
 edition = "2024"
 
 [dependencies]
 serde = "1"
 serde_derive = "1"
-occams-rpc-core = {path="../core", version="0"}
-occams-rpc-stream = {path="../stream/", version="0"}
-occams-rpc-tokio = {path="../runtime/tokio", version="0", optional=true}
-occams-rpc-smol = {path="../runtime/smol", version="0", features=["global"], optional=true}
-occams-rpc-tcp = {path="../transport/tcp", version="0"}
-occams-rpc-codec = {path="../codec", version="0", features=["msgpack"]}
-occams-rpc = {path="../", version="0"}
+razor-rpc-core = {path="../core", version="0"}
+razor-stream = {path="../stream/", version="0"}
+orb = { version = "0" }
+orb-tokio = { version = "0", optional=true}
+orb-smol = { version = "0", features=["global"], optional=true}
+razor-rpc-tcp = {path="../transport/tcp", version="0"}
+razor-rpc-codec = {path="../codec", version="0", features=["msgpack"]}
+razor-rpc = {path="../", version="0"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
 crossfire = "2.1"
@@ -26,6 +28,6 @@ async-trait = "0"
 
 [features]
 default = ["smol"]
-tokio = ["dep:tokio", "dep:occams-rpc-tokio"]
-smol = ["dep:smol", "dep:occams-rpc-smol"]
+tokio = ["dep:tokio", "dep:orb-tokio"]
+smol = ["dep:smol", "dep:orb-smol"]
 

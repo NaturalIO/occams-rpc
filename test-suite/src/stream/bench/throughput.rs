@@ -1,17 +1,17 @@
 use crossfire::mpsc;
 use io_buffer::{Buffer, rand_buffer};
 use nix::errno::Errno;
-use occams_rpc_stream::client::{
+use razor_stream::client::{
     ClientConfig,
     task::{ClientTaskDone, ClientTaskEncode, ClientTaskGetResult},
 };
-use occams_rpc_stream::proto::{RPC_REQ_HEADER_LEN, RpcAction};
-use occams_rpc_stream::server::{
+use razor_stream::proto::{RPC_REQ_HEADER_LEN, RpcAction};
+use razor_stream::server::{
     ServerConfig,
     task::{ServerTaskAction, ServerTaskDone},
 };
-use occams_rpc_test::stream::{client::*, server::*};
-use occams_rpc_test::*;
+use razor_rpc_test::stream::{client::*, server::*};
+use razor_rpc_test::*;
 use std::convert::TryFrom;
 use std::time::Instant;
 use captains_log::*;
@@ -55,7 +55,7 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
 
     runner.block_on(async move {
         log::set_max_level(LevelFilter::Info);
-        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/occams-rpc-test-socket" };
+        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
         let (_server, actual_server_addr) =
             init_server(dispatch_task, server_config.clone(), server_bind_addr)
                 .expect("server listen");
@@ -81,7 +81,7 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
 
         let write_task = FileClientTaskWrite::new(tx.clone(), 1, 0, write_data.clone());
         let mut task: FileClientTask = write_task.into();
-        let codec = occams_rpc_test::Codec::default();
+        let codec = razor_rpc_test::Codec::default();
         let mut req_buf = Vec::new();
         task.encode_req(&codec, &mut req_buf).expect("encode");
         let req_size = req_buf.len() + RPC_REQ_HEADER_LEN + data_len as usize;

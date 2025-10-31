@@ -1,11 +1,12 @@
-use crate::net::{UnifyListener, UnifyStream};
 use captains_log::filter::LogFilter;
 use io_buffer::Buffer;
-use occams_rpc_core::io::{AsyncBufStream, AsyncRead, AsyncWrite, Cancellable, io_with_timeout};
-use occams_rpc_core::runtime::AsyncIO;
-use occams_rpc_core::{Codec, ServerConfig, error::*};
-use occams_rpc_stream::server::{RpcSvrReq, ServerTransport, task::ServerTaskEncode};
-use occams_rpc_stream::{proto, proto::RpcAction};
+use orb::io::AsyncBufStream;
+use orb::net::{UnifyListener, UnifyStream};
+use orb::prelude::*;
+use orb::utils::Cancellable;
+use razor_rpc_core::{Codec, ServerConfig, error::*};
+use razor_stream::server::{RpcSvrReq, ServerTransport, task::ServerTaskEncode};
+use razor_stream::{proto, proto::RpcAction};
 use std::cell::UnsafeCell;
 use std::mem::transmute;
 use std::sync::Arc;
@@ -14,8 +15,8 @@ use std::{fmt, io};
 
 pub const SERVER_DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
-pub struct TcpServer<IO: AsyncIO> {
-    stream: UnsafeCell<AsyncBufStream<UnifyStream<IO>>>,
+pub struct TcpServer<RT: AsyncRuntime> {
+    stream: UnsafeCell<AsyncBufStream<UnifyStream<RT>>>,
     _conn_count: Arc<()>,
     config: ServerConfig,
     /// for read
@@ -26,15 +27,15 @@ pub struct TcpServer<IO: AsyncIO> {
     encode_buf: UnsafeCell<Vec<u8>>,
 }
 
-unsafe impl<IO: AsyncIO> Send for TcpServer<IO> {}
+unsafe impl<RT: AsyncRuntime> Send for TcpServer<RT> {}
 
-unsafe impl<IO: AsyncIO> Sync for TcpServer<IO> {}
+unsafe impl<RT: AsyncRuntime> Sync for TcpServer<RT> {}
 
-impl<IO: AsyncIO> TcpServer<IO> {
+impl<RT: AsyncRuntime> TcpServer<RT> {
     // Because async runtimes does not support splitting read and write to static handler,
     // we use unsafe to achieve such goal,
     #[inline(always)]
-    fn get_stream_mut(&self) -> &mut AsyncBufStream<UnifyStream<IO>> {
+    fn get_stream_mut(&self) -> &mut AsyncBufStream<UnifyStream<RT>> {
         unsafe { transmute(self.stream.get()) }
     }
 
@@ -54,17 +55,20 @@ impl<IO: AsyncIO> TcpServer<IO> {
     }
 }
 
-impl<IO: AsyncIO> fmt::Debug for TcpServer<IO> {
+impl<RT: AsyncRuntime> fmt::Debug for TcpServer<RT> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.get_stream_mut().fmt(f)
     }
 }
 
-impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
-    type IO = IO;
-    type Listener = UnifyListener<IO>;
+impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
+    type Listener = UnifyListener<RT>;
 
-    fn new_conn(stream: UnifyStream<IO>, config: &ServerConfig, conn_count: Arc<()>) -> Self {
+    async fn bind(addr: &str) -> io::Result<Self::Listener> {
+        Self::Listener::bind(addr).await
+    }
+
+    fn new_conn(stream: UnifyStream<RT>, config: &ServerConfig, conn_count: Arc<()>) -> Self {
         let mut buf_size = config.stream_buf_size;
         if buf_size == 0 {
             buf_size = SERVER_DEFAULT_BUF_SIZE;
@@ -91,7 +95,7 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
         let idle_timeout = self.config.idle_timeout;
         let mut req_header_buf = [0u8; proto::RPC_REQ_HEADER_LEN];
 
-        let cancel_f = close_ch.recv_with_timer(IO::sleep(idle_timeout));
+        let cancel_f = close_ch.recv_with_timer(RT::sleep(idle_timeout));
         match Cancellable::new(reader.read_exact(&mut req_header_buf), cancel_f).await {
             Ok(Err(e)) => {
                 logger_debug!(logger, "{:?}: recv_req: err {}", self, e);
@@ -120,7 +124,7 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
             Err(action_len) => {
                 let action_buf = self.get_action_buf();
                 action_buf.resize(action_len as usize, 0);
-                match io_with_timeout!(IO, read_timeout, reader.read_exact(action_buf)) {
+                match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(action_buf)) {
                     Err(e) => {
                         logger_trace!(logger, "{:?}: read_exact error {}", self, e);
                         return Err(RpcIntErr::IO);
@@ -142,7 +146,7 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
         let msg_buf = self.get_msg_buf();
         msg_buf.resize(rpc_head.msg_len.get() as usize, 0);
         if rpc_head.msg_len > 0 {
-            if let Err(e) = io_with_timeout!(IO, read_timeout, reader.read_exact(msg_buf)) {
+            if let Err(e) = crate::io_with_timeout!(RT, read_timeout, reader.read_exact(msg_buf)) {
                 logger_trace!(logger, "{:?}: read req msg error: {:?}", self, e);
                 return Err(RpcIntErr::IO);
             }
@@ -153,7 +157,8 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
             match Buffer::alloc(blob_len) {
                 Err(_) => return Err(RpcIntErr::Decode),
                 Ok(mut ext_buf) => {
-                    match io_with_timeout!(IO, read_timeout, reader.read_exact(&mut ext_buf)) {
+                    match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(&mut ext_buf))
+                    {
                         Err(e) => {
                             logger_trace!(logger, "{:?}: read_exact_buffer error: {}", self, e);
                             return Err(RpcIntErr::IO);
@@ -176,12 +181,14 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
         let write_timeout = self.config.write_timeout;
         let buf = self.get_encode_buf();
         let (seq, blob_buf) = proto::RespHead::encode(&logger, codec, buf, &mut task);
-        if let Err(e) = io_with_timeout!(IO, write_timeout, writer.write_all(buf)) {
+        if let Err(e) = crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
             logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
             return Err(e);
         }
         if let Some(blob) = blob_buf {
-            if let Err(e) = io_with_timeout!(IO, write_timeout, writer.write_all(blob.as_ref())) {
+            if let Err(e) =
+                crate::io_with_timeout!(RT, write_timeout, writer.write_all(blob.as_ref()))
+            {
                 logger_debug!(
                     logger,
                     "{:?}: send_resp write resp seq={} blob err: {}",
@@ -204,7 +211,7 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
         let write_timeout = self.config.write_timeout;
         let buf = self.get_encode_buf();
         let seq = proto::RespHead::encode_internal(&logger, buf, seq, err);
-        if let Err(e) = io_with_timeout!(IO, write_timeout, writer.write_all(buf)) {
+        if let Err(e) = crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
             logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
             return Err(e);
         }
@@ -215,7 +222,7 @@ impl<IO: AsyncIO> ServerTransport for TcpServer<IO> {
     #[inline(always)]
     async fn flush_resp(&self, logger: &LogFilter) -> io::Result<()> {
         let writer = self.get_stream_mut();
-        if let Err(e) = io_with_timeout!(IO, self.config.write_timeout, writer.flush()) {
+        if let Err(e) = crate::io_with_timeout!(RT, self.config.write_timeout, writer.flush()) {
             logger_warn!(logger, "{:?}: flush err: {}", self, e);
             return Err(e);
         }

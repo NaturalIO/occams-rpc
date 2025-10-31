@@ -1,17 +1,17 @@
 [package]
-name = "occams-rpc-api-macros"
-version = "0.2.0"
+name = "razor-rpc-api-macros"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 readme = "../README.md"
 license = "MIT"
 description = """
-The macro crate for occams-rpc.
-occams-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
+The macro crate for razor-rpc.
+razor-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 
@@ -25,13 +25,13 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 captains-log = "0"
-occams-rpc-core = { path = "../core", version="0" }
-occams-rpc-codec = { path = "../codec", version="0", features=["msgpack"] }
-occams-rpc-stream = { path = "../stream", version="0" }
-occams-rpc = { path = "../", version = "0"}
+razor-rpc-core = { path = "../core", version="0" }
+razor-rpc-codec = { path = "../codec", version="0", features=["msgpack"] }
+razor-stream = { path = "../stream", version="0" }
+razor-rpc = { path = "../", version = "0"}
 serde = { version = "1.0", features = ["derive"] }
 crossfire = "2.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 async-trait = "0.1"
 nix = "0"
-occams-rpc-tokio = { path = "../runtime/tokio" }
+orb-tokio = { version = "0.1" }

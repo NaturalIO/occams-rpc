@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
  *  require the codec implement to match.
  */
 
-/// Interface for [occams-rpc-codec](https://docs.rs/occams-rpc-codec)
+/// Interface for [razor-rpc-codec](https://docs.rs/razor-rpc-codec)
 ///
 /// The codec is immutable, if need changing (like setting up cipher), should have inner
 /// mutablilty

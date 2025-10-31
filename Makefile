@@ -19,20 +19,20 @@ all-test: test-core test-codec test-stream-macros test-api-macros test
 
 .PHONY: test-core
 test-core: init
-	cargo check -p occams-rpc-core
-	cargo test -p occams-rpc-core
+	cargo check -p razor-rpc-core
+	cargo test -p razor-rpc-core
 
 .PHONY: test-codec
-	cargo check -p occams-rpc-codec
-	cargo test -p occams-rpc-codec
+	cargo check -p razor-rpc-codec
+	cargo test -p razor-rpc-codec
 
 .PHONY: test-stream-macros
 test-stream-macros: init
-	cargo test -p occams-rpc-stream-macros -- --nocapture
+	cargo test -p razor-stream-macros -- --nocapture
 
 .PHONY: test-api-macros
 test-api-macros: init
-	RUST_BACKTRACE=1 cargo test -p occams-rpc-api-macros -- --nocapture
+	RUST_BACKTRACE=1 cargo test -p razor-rpc-api-macros -- --nocapture
 
 # usage:
 # make test-stream "test_normal --F tokio"
@@ -41,21 +41,19 @@ test-api-macros: init
 .PHONY: test
 test: init
 	@echo "Run integration tests"
-	cargo test -p occams-rpc-test ${ARGS} -- --nocapture --test-threads=1
+	cargo test -p razor-rpc-test ${ARGS} -- --nocapture --test-threads=1
 	@echo "Done"
 
 pressure: init
-	cargo test -p occams-rpc-test ${ARGS} --release bench -- --nocapture --test-threads=1
+	cargo test -p razor-rpc-test ${ARGS} --release bench -- --nocapture --test-threads=1
 
 .PHONY: build
 build: init
-	cargo build -p occams-rpc-core
-	cargo build -p occams-rpc-tokio
-	cargo build -p occams-rpc-smol
-	cargo build -p occams-rpc-stream-macros
-	cargo build -p occams-rpc-stream
-	cargo build -p occams-rpc-tcp
-	cargo build -p occams-rpc-test
+	cargo build -p razor-rpc-core
+	cargo build -p razor-stream-macros
+	cargo build -p razor-stream
+	cargo build -p razor-rpc-tcp
+	cargo build -p razor-rpc-test
 	cargo build
 
 .DEFAULT_GOAL = build

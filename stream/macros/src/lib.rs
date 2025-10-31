@@ -43,10 +43,10 @@ mod server_task_enum;
 ///
 /// * `#[field(req_blob)]`: (Optional) Marks a field for an optional request blob. Must implement `AsRef<[u8]>`.
 ///
-/// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `occams_rpc_core::io::AllocateBuf`.
+/// * `#[field(resp_blob)]`: (Optional) Marks a field for an optional response blob. Must be `Option<T>` where `T` implements `razor_rpc_core::buffer::AllocateBuf`.
 ///
 /// * `#[field(res)]`: (Optional) When used with `#[field(noti)]`, triggers automatic `ClientTaskDone` implementation.
-///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `occams_rpc_core::error::RpcErrCodec`. Stores the final result of the task.
+///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `razor_rpc_core::error::RpcErrCodec`. Stores the final result of the task.
 ///
 /// * `#[field(noti)]`: (Optional) When used with `#[field(res)]`, triggers automatic `ClientTaskDone` implementation.
 ///   Must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`) to notify of task completion.

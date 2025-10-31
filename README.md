@@ -1,23 +1,23 @@
-# occams-rpc
+# razor-rpc
 
 A modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 
 ## Components
 
-`occams-rpc` is built from a collection of crates that provide different functionalities:
+`razor-rpc` is built from a collection of crates that provide different functionalities:
 
-- core: [`occams-rpc-core`](https://docs.rs/occams-rpc-core): core utils crate
-- codec: [`occams-rpc-codec`](https://docs.rs/occams-rpc-codec): Provides codecs for serialization, such as `msgpack`.
+- core: [`razor-rpc-core`](https://docs.rs/razor-rpc-core): core utils crate
+- codec: [`razor-rpc-codec`](https://docs.rs/razor-rpc-codec): Provides codecs for serialization, such as `msgpack`.
 - runtimes:
-  - [`occams-rpc-tokio`](https://docs.rs/occams-rpc-tokio): A runtime adapter for the `tokio` runtime.
-  - [`occams-rpc-smol`](https://docs.rs/occams-rpc-smol): A runtime adapter for the `smol` runtime.
+  - [`orb-tokio`](https://docs.rs/orb-tokio): A runtime adapter for the `tokio` runtime.
+  - [`orb-smol`](https://docs.rs/orb-smol): A runtime adapter for the `smol` runtime.
 - transports:
-  - [`occams-rpc-tcp`](https://docs.rs/occams-rpc-tcp): A TCP transport implementation.
+  - [`razor-rpc-tcp`](https://docs.rs/razor-rpc-tcp): A TCP transport implementation.
 
 ## Streaming interface
 
-`occams-rpc-stream` <https://docs.rs/occams-rpc-stream>
+`razor-rpc-stream` <https://docs.rs/razor-rpc-stream>
 
 The interface is designed to optimize throughput and lower
 CPU consumption for high-performance services.
@@ -39,32 +39,32 @@ coroutine to write responses. Requests can be dispatched with a user-defined
 
 ## API call interface
 
-`occams-rpc` <https://docs.rs/occams-rpc>
+`razor-rpc` <https://docs.rs/razor-rpc>
 
 - Independent from async runtime (with plugins)
 - With service trait very similar to grpc / tarpc (stream in API interface is not supported
 currently)
 - Support latest `impl Future` definition of rust since 1.75, also support legacy `async_trait`
 wrapper
-- Each method can have different custom error type (requires the type implements [RpcErrCodec](https://docs.rs/occams-rpc-core/latest/occams_rpc_core/error/trait.RpcErrCodec.html))
-- based on occams-rpc-stream`: Full duplex in each connection, with sliding window threshold, allow maximizing throughput and lower cpu usage.
+- Each method can have different custom error type (requires the type implements [RpcErrCodec](https://docs.rs/razor-rpc-core/latest/razor_rpc_core/error/trait.RpcErrCodec.html))
+- based on razor-rpc-stream`: Full duplex in each connection, with sliding window threshold, allow maximizing throughput and lower cpu usage.
 
 (Warning: The API and feature is still evolving, might changed in the future)
 
 ### Example
 
 ```rust
-use occams_rpc::client::{endpoint_async, APIClientReq, ClientConfig};
-use occams_rpc::server::{service, ServerConfig};
-use occams_rpc::RpcError;
-use occams_rpc_tcp::{TcpClient, TcpServer};
+use razor_rpc::client::{endpoint_async, APIClientReq, ClientConfig};
+use razor_rpc::server::{service, ServerConfig};
+use razor_rpc::RpcError;
+use razor_rpc_tcp::{TcpClient, TcpServer};
 use nix::errno::Errno;
 use std::future::Future;
 use std::sync::Arc;
 
 // 1. Choose the async runtime, and the codec
-type OurRt = occams_rpc_smol::SmolRT;
-type OurCodec = occams_rpc_codec::MsgpCodec;
+type OurRt = razor_rpc_smol::SmolRT;
+type OurCodec = razor_rpc_codec::MsgpCodec;
 // 2. Choose transport
 type ServerProto = TcpServer<OurRt>;
 type ClientProto = TcpClient<OurRt>;
@@ -113,11 +113,11 @@ impl CalculatorService for CalculatorServer {
 
 fn setup_server() -> std::io::Result<String> {
     // 5. Server setup with default ServerFacts
-    use occams_rpc::server::{RpcServer, ServerDefault};
+    use razor_rpc::server::{RpcServer, ServerDefault};
     let server_config = ServerConfig::default();
     let mut server = RpcServer::new(ServerDefault::new(server_config, OurRt::new_global()));
     // 6. dispatch
-    use occams_rpc::server::dispatch::Inline;
+    use razor_rpc::server::dispatch::Inline;
     let disp = Inline::<OurCodec, _>::new(CalculatorServer);
     // 7. Start listening
     let actual_addr = server.listen::<ServerProto, _>("127.0.0.1:8082", disp)?;
@@ -125,7 +125,7 @@ fn setup_server() -> std::io::Result<String> {
 }
 
 async fn use_client(server_addr: &str) {
-    use occams_rpc::client::*;
+    use razor_rpc::client::*;
     // 8. ClientFacts
     let mut client_config = ClientConfig::default();
     client_config.task_timeout = 5;

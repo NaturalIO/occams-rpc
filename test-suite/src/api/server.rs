@@ -1,10 +1,10 @@
 use super::service::*;
 use nix::errno::Errno;
-use occams_rpc::server::service;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::server::{RpcServer, ServerConfig};
-use occams_rpc_tcp::TcpServer;
+use razor_rpc::server::service;
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_core::error::RpcError;
+use razor_rpc_tcp::TcpServer;
+use razor_stream::server::{RpcServer, ServerConfig};
 use rstest::*;
 use std::sync::Arc;
 
@@ -49,13 +49,13 @@ impl EchoService for EchoServer {
 // Create an API server with the given services
 pub fn create_api_server(
     config: ServerConfig,
-) -> RpcServer<occams_rpc::server::ServerDefault<crate::RT>> {
-    use occams_rpc::server::ServerDefault;
+) -> RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>> {
+    use razor_rpc::server::ServerDefault;
 
     #[cfg(feature = "tokio")]
-    let rt = crate::RT::new(tokio::runtime::Handle::current());
+    let rt = crate::ClientRT(crate::RT::new(tokio::runtime::Handle::current()));
     #[cfg(not(feature = "tokio"))]
-    let rt = crate::RT::new_global();
+    let rt = crate::ClientRT(crate::RT::new_global());
 
     let facts = ServerDefault::new(config, rt);
     let server = RpcServer::new(facts);
@@ -65,14 +65,14 @@ pub fn create_api_server(
 
 // Add services to the server and start listening
 pub fn listen_with_services(
-    mut server: RpcServer<occams_rpc::server::ServerDefault<crate::RT>>, bind_addr: &str,
-    cal_server: CalServer, echo_server: EchoServer,
+    mut server: RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>>,
+    bind_addr: &str, cal_server: CalServer, echo_server: EchoServer,
 ) -> Result<
-    (RpcServer<occams_rpc::server::ServerDefault<crate::RT>>, String),
+    (RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>>, String),
     Box<dyn std::error::Error>,
 > {
-    use occams_rpc::server::ServiceMuxDyn;
-    use occams_rpc::server::dispatch::Inline;
+    use razor_rpc::server::ServiceMuxDyn;
+    use razor_rpc::server::dispatch::Inline;
 
     // Create service mux and add services
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
@@ -102,8 +102,8 @@ pub fn echo_server() -> EchoServer {
 // Create service mux dynamic dispatch
 pub fn create_service_mux_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl occams_rpc_stream::server::dispatch::Dispatch {
-    use occams_rpc::server::{ServiceMuxDyn, dispatch::Inline};
+) -> impl razor_rpc_stream::server::dispatch::Dispatch {
+    use razor_rpc::server::{ServiceMuxDyn, dispatch::Inline};
 
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
     service_mux.add(Arc::new(cal_server));
@@ -115,9 +115,9 @@ pub fn create_service_mux_dispatch(
 // Create service mux struct dispatch
 pub fn create_service_mux_struct_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl occams_rpc_stream::server::dispatch::Dispatch {
-    use occams_rpc::server::dispatch::Inline;
-    use occams_rpc::server::service_mux_struct;
+) -> impl razor_rpc_stream::server::dispatch::Dispatch {
+    use razor_rpc::server::dispatch::Inline;
+    use razor_rpc::server::service_mux_struct;
     use std::sync::Arc;
 
     #[service_mux_struct]
@@ -134,8 +134,8 @@ pub fn create_service_mux_struct_dispatch(
 
 // Fixture that returns a service mux dispatch
 #[fixture]
-pub fn service_mux_dispatch() -> occams_rpc::server::ServiceMuxDyn<MsgpCodec> {
-    use occams_rpc::server::ServiceMuxDyn;
+pub fn service_mux_dispatch() -> razor_rpc::server::ServiceMuxDyn<MsgpCodec> {
+    use razor_rpc::server::ServiceMuxDyn;
 
     // Create service mux
     ServiceMuxDyn::<MsgpCodec>::new()

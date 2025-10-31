@@ -1,19 +1,19 @@
 [workspace]
-members = ["core", "codec", "macros", "runtime/tokio", "runtime/smol", "stream", "stream/macros", "transport/tcp", "transport/rdma", "transport/quic", "test-suite", ]
+members = ["core", "codec", "macros", "stream", "stream/macros", "transport/tcp", "transport/rdma", "transport/quic", "test-suite", ]
 
 [package]
-name = "occams-rpc"
-version = "0.2.1"
+name = "razor-rpc"
+version = "0.2.13"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
-repository = "https://github.com/NaturalIO/occams-rpc"
-documentation = "https://docs.rs/occams-rpc"
+repository = "https://github.com/NaturalIO/razor-rpc"
+documentation = "https://docs.rs/razor-rpc"
 keywords = ["networking", "rpc"]
 readme = "README.md"
 license = "MIT"
 description = """
-occams-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
+razor-rpc is a modular, pluggable RPC for high throughput scenario, supports various runtimes,
 with a low-level streaming interface, and high-level remote API call interface.
 """
 
@@ -22,22 +22,23 @@ log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
 io-buffer = "1"
 serde = "1"
-occams-rpc-core = {path="core/", version=">=0.2"}
-occams-rpc-stream = {path="stream/", version=">=0.2"}
-occams-rpc-api-macros = { path = "macros", version = ">=0.2" }
+razor-rpc-core = {path="core/", version=">=0.2"}
+razor-stream = {path="stream/", version=">=0.2"}
+razor-rpc-api-macros = { path = "macros", version = ">=0.2" }
 async-trait = "0"
 rustc-hash = "2"
 crossfire = "2.1"
+orb = "0"
 
 [dev-dependencies]
 serde_derive = "1"
-occams-rpc-smol = {path="runtime/smol/", version = "0", features=["global"]}
-occams-rpc-tokio = {path="runtime/tokio/", version = "0"}
 nix = "0"
-occams-rpc-tcp = {path="transport/tcp/", version = "0"}
-occams-rpc-codec = {path="codec/", version="0", features=["msgpack"]}
+razor-rpc-tcp = {path="transport/tcp/", version = "0"}
+razor-rpc-codec = {path="codec/", version="0", features=["msgpack"]}
 
 [package.metadata.docs.rs]
 all-features = true
 # enable features in the documentation
 rustdoc-args = ["--cfg", "docsrs"]
+
+[features]

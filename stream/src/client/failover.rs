@@ -4,7 +4,7 @@ use crate::proto::RpcAction;
 use arc_swap::ArcSwapOption;
 use captains_log::filter::LogFilter;
 use crossfire::*;
-use occams_rpc_core::{
+use razor_rpc_core::{
     ClientConfig, Codec,
     error::{EncodedErr, RpcIntErr},
 };

@@ -1,5 +1,5 @@
 use super::task::APIServerReq;
-use occams_rpc_core::{Codec, error::RpcIntErr};
+use razor_rpc_core::{Codec, error::RpcIntErr};
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ pub trait ServiceStatic<C: Codec>: Send + Sync + 'static + Sized {
     /// match req.method
     ///     match req.decode::<RequestType>() {
     ///         Err(())=>{
-    ///             req.set_rpc_error(occams_rpc_core::error::RpcIntErr::Decode);
+    ///             req.set_rpc_error(razor_rpc_core::error::RpcIntErr::Decode);
     ///             returnl
     ///         }
     ///         Ok(arg)=>{

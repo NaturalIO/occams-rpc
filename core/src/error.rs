@@ -107,7 +107,7 @@ impl<E: RpcErrCodec> From<RpcIntErr> for RpcError<E> {
 /// # Example with serde_derive
 /// ```rust
 /// use serde_derive::{Serialize, Deserialize};
-/// use occams_rpc_core::{error::{RpcErrCodec, RpcIntErr, EncodedErr}, Codec};
+/// use razor_rpc_core::{error::{RpcErrCodec, RpcIntErr, EncodedErr}, Codec};
 /// use strum::Display;
 /// #[derive(Serialize, Deserialize, Debug)]
 /// pub enum MyError {
@@ -143,7 +143,7 @@ impl<E: RpcErrCodec> From<RpcIntErr> for RpcError<E> {
 ///
 /// ```rust
 /// use num_enum::TryFromPrimitive;
-/// use occams_rpc_core::{error::{RpcErrCodec, RpcIntErr, EncodedErr}, Codec};
+/// use razor_rpc_core::{error::{RpcErrCodec, RpcIntErr, EncodedErr}, Codec};
 ///
 /// // Define your error codes as a C-like enum with explicit values
 /// // You can use num_enum's TryFromPrimitive for safer deserialization

@@ -1,9 +1,9 @@
 use crossfire::{MTx, mpsc};
 use nix::errno::Errno;
-use occams_rpc_codec::MsgpCodec;
-use occams_rpc_core::error::{RpcErrCodec, RpcError, RpcIntErr};
-use occams_rpc_stream::{client::task::*, proto::RpcAction};
-use occams_rpc_stream_macros::{client_task, client_task_enum};
+use razor_rpc_codec::MsgpCodec;
+use razor_rpc_core::error::{RpcErrCodec, RpcError, RpcIntErr};
+use razor_stream::{client::task::*, proto::RpcAction};
+use razor_stream_macros::{client_task, client_task_enum};
 use std::marker::PhantomData;
 
 #[client_task(1, debug)]

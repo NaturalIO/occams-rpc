@@ -2,9 +2,9 @@ use crate::stream::{client::*, server::*};
 use crate::*;
 use crossfire::mpsc;
 use nix::errno::Errno;
-use occams_rpc_core::error::RpcError;
-use occams_rpc_stream::client::{ClientConfig, task::ClientTaskGetResult};
-use occams_rpc_stream::server::{ServerConfig, task::ServerTaskDone};
+use razor_rpc_core::error::RpcError;
+use razor_stream::client::{ClientConfig, task::ClientTaskGetResult};
+use razor_stream::server::{ServerConfig, task::ServerTaskDone};
 
 #[logfn]
 #[rstest]
@@ -34,7 +34,7 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
     };
 
     runner.block_on(async move {
-        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/occams-rpc-test-socket" };
+        let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
         let (_server, actual_server_addr) =
             init_server_closure(dispatch_task, server_config.clone(), &server_bind_addr)
                 .expect("server listen");

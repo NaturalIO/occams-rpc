@@ -1,6 +1,6 @@
 use super::RpcSvrReq;
 use super::task::*;
-use occams_rpc_core::Codec;
+use razor_rpc_core::Codec;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ pub trait Dispatch: Send + Sync + Sized + Clone + 'static {
 /// # Example
 ///
 /// ```no_compile,ignore
-/// use occams_rpc_stream::server::{ServerFacts, Dispatch};
+/// use razor_rpc_stream::server::{ServerFacts, Dispatch};
 /// impl ServerFacts for YourServer {
 ///
 ///     ...
