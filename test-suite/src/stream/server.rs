@@ -4,16 +4,16 @@ use razor_rpc_codec::MsgpCodec;
 use razor_rpc_tcp::TcpServer;
 use razor_stream::server::{dispatch::*, task::*, *};
 
-pub type ServerDefault = razor_stream::server::ServerDefault<crate::RT>;
+pub type MyServer = razor_stream::server::ServerDefault<crate::RT>;
 
-pub fn init_server(config: ServerConfig) -> RpcServer<ServerDefault> {
-    let facts = ServerDefault::new(config, crate::new_rt());
+pub fn init_server(config: ServerConfig) -> RpcServer<MyServer> {
+    let facts = MyServer::new(config, crate::new_rt());
     RpcServer::new(facts)
 }
 
-pub fn init_server_closure<H, FH, RT>(
+pub async fn init_server_closure<H, FH, RT>(
     server_handle: H, config: ServerConfig, addr: &str,
-) -> Result<(RpcServer<ServerDefault<crate::RT>>, String), std::io::Error>
+) -> Result<(RpcServer<MyServer>, String), std::io::Error>
 where
     H: FnOnce(FileServerTask) -> FH + Send + Sync + 'static + Clone,
     FH: Future<Output = Result<(), ()>> + Send + 'static,
@@ -21,7 +21,7 @@ where
 {
     let mut server = init_server(config);
     let dispatch = new_closure_dispatcher(server_handle);
-    let local_addr = server.listen::<TcpServer<crate::RT>, _>(addr, dispatch)?;
+    let local_addr = server.listen::<TcpServer<crate::RT>, _>(addr, dispatch).await?;
     Ok((server, local_addr))
 }
 

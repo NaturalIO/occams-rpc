@@ -11,15 +11,15 @@ use razor_stream::{RpcError, RpcIntErr};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::{Arc, atomic::AtomicU64};
 
-pub type ClientDefault = razor_stream::client::ClientDefault<FileClientTask, crate::RT, MsgpCodec>;
+pub type MyClient = ClientDefault<FileClientTask, crate::RT, MsgpCodec>;
 
-pub type FileClient = ClientStream<ClientDefault, TcpClient<crate::RT>>;
+pub type FileClient = ClientStream<MyClient, TcpClient<crate::RT>>;
 
 pub async fn init_client(
     config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>,
-) -> Result<FileClient, Errno> {
-    let facts = FileClient::new(config, crate::new_rt());
-    ClientStream::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
+) -> Result<FileClient, RpcIntErr> {
+    let facts = MyClient::new(config, crate::new_rt());
+    FileClient::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
 }
 
 #[derive(PartialEq, Debug)]
@@ -157,8 +157,8 @@ impl FileClientTaskWrite {
 
 pub async fn init_failover_client(
     config: ClientConfig, addrs: Vec<String>, round_robin: bool,
-) -> FailoverPool<FileClient, TcpClient<crate::RT>> {
-    let facts = FileClient::new(config, crate::new_rt());
+) -> FailoverPool<MyClient, TcpClient<crate::RT>> {
+    let facts = MyClient::new(config, crate::new_rt());
     FailoverPool::new(
         facts,
         addrs,

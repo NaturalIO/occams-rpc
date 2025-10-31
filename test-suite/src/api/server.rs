@@ -1,12 +1,14 @@
 use super::service::*;
 use nix::errno::Errno;
-use razor_rpc::server::service;
+use razor_rpc::server::{ServiceMuxDyn, dispatch::Inline, service, service_mux_struct};
 use razor_rpc_codec::MsgpCodec;
 use razor_rpc_core::error::RpcError;
 use razor_rpc_tcp::TcpServer;
 use razor_stream::server::{RpcServer, ServerConfig};
 use rstest::*;
 use std::sync::Arc;
+
+pub type APIServer = razor_rpc::server::ServerDefault<crate::RT>;
 
 #[derive(Clone, Debug)]
 pub struct CalServer();
@@ -47,33 +49,18 @@ impl EchoService for EchoServer {
 }
 
 // Create an API server with the given services
-pub fn create_api_server(
-    config: ServerConfig,
-) -> RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>> {
-    use razor_rpc::server::ServerDefault;
-
-    #[cfg(feature = "tokio")]
-    let rt = crate::ClientRT(crate::RT::new(tokio::runtime::Handle::current()));
-    #[cfg(not(feature = "tokio"))]
-    let rt = crate::ClientRT(crate::RT::new_global());
-
-    let facts = ServerDefault::new(config, rt);
+pub fn create_api_server(config: ServerConfig) -> RpcServer<APIServer> {
+    let facts = APIServer::new(config, crate::new_rt());
     let server = RpcServer::new(facts);
 
     server
 }
 
 // Add services to the server and start listening
-pub fn listen_with_services(
-    mut server: RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>>,
-    bind_addr: &str, cal_server: CalServer, echo_server: EchoServer,
-) -> Result<
-    (RpcServer<razor_rpc::server::ServerDefault<crate::ClientRT<crate::RT>>>, String),
-    Box<dyn std::error::Error>,
-> {
-    use razor_rpc::server::ServiceMuxDyn;
-    use razor_rpc::server::dispatch::Inline;
-
+pub async fn listen_with_services(
+    mut server: RpcServer<APIServer>, bind_addr: &str, cal_server: CalServer,
+    echo_server: EchoServer,
+) -> Result<(RpcServer<APIServer>, String), Box<dyn std::error::Error>> {
     // Create service mux and add services
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
     service_mux.add(Arc::new(cal_server));
@@ -83,7 +70,7 @@ pub fn listen_with_services(
     let dispatch = Inline::new(Arc::new(service_mux));
 
     // Listen on the address
-    let actual_addr = server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch)?;
+    let actual_addr = server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch).await?;
 
     Ok((server, actual_addr))
 }
@@ -102,9 +89,7 @@ pub fn echo_server() -> EchoServer {
 // Create service mux dynamic dispatch
 pub fn create_service_mux_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl razor_rpc_stream::server::dispatch::Dispatch {
-    use razor_rpc::server::{ServiceMuxDyn, dispatch::Inline};
-
+) -> impl razor_stream::server::dispatch::Dispatch {
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
     service_mux.add(Arc::new(cal_server));
     service_mux.add(Arc::new(echo_server));
@@ -115,11 +100,7 @@ pub fn create_service_mux_dispatch(
 // Create service mux struct dispatch
 pub fn create_service_mux_struct_dispatch(
     cal_server: CalServer, echo_server: EchoServer,
-) -> impl razor_rpc_stream::server::dispatch::Dispatch {
-    use razor_rpc::server::dispatch::Inline;
-    use razor_rpc::server::service_mux_struct;
-    use std::sync::Arc;
-
+) -> impl razor_stream::server::dispatch::Dispatch {
     #[service_mux_struct]
     #[derive(Clone)]
     struct TestServiceMux {
@@ -134,9 +115,6 @@ pub fn create_service_mux_struct_dispatch(
 
 // Fixture that returns a service mux dispatch
 #[fixture]
-pub fn service_mux_dispatch() -> razor_rpc::server::ServiceMuxDyn<MsgpCodec> {
-    use razor_rpc::server::ServiceMuxDyn;
-
-    // Create service mux
+pub fn service_mux_dispatch() -> ServiceMuxDyn<MsgpCodec> {
     ServiceMuxDyn::<MsgpCodec>::new()
 }

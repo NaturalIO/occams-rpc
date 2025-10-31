@@ -20,11 +20,11 @@ pub type RT = orb_smol::SmolRT;
 pub fn new_rt() -> RT {
     #[cfg(feature = "tokio")]
     {
-        TokioRT::new_multi_thread(std::thread::available_parallelism().unwrap_or(0) as usize)
+        RT::new_multi_thread(std::thread::available_parallelism().unwrap_or(0) as usize)
     }
     #[cfg(not(feature = "tokio"))]
     {
-        SmolRT::new_global()
+        RT::new_global()
     }
 }
 
