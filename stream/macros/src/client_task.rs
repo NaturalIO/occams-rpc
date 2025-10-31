@@ -135,7 +135,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
             #[inline]
             fn reserve_resp_blob(&mut self, size: i32) -> Option<&mut [u8]> {
-                razor_rpc_core::buffer:::AllocateBuf::reserve(&mut self.#resp_blob_field_name, size)
+                razor_rpc_core::buffer::AllocateBuf::reserve(&mut self.#resp_blob_field_name, size)
             }
         }
     } else {

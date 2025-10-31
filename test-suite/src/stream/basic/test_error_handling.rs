@@ -35,9 +35,13 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
 
     runner.block_on(async move {
         let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
-        let (_server, actual_server_addr) =
-            init_server_closure(dispatch_task, server_config.clone(), &server_bind_addr)
-                .expect("server listen");
+        let (_server, actual_server_addr) = init_server_closure::<_, _, crate::RT>(
+            dispatch_task,
+            server_config.clone(),
+            &server_bind_addr,
+        )
+        .await
+        .expect("server listen");
         debug!("client addr {:?}", actual_server_addr);
         let mut client =
             init_client(client_config, &actual_server_addr, None).await.expect("connect client");

@@ -1,6 +1,6 @@
-//! # occams-rpc-stream-macros
+//! # razor-rpc-stream-macros
 //!
-//! This crate provides procedural macros to simplify the implementation of RPC tasks for the [`occams-rpc`](https://docs.rs/occams-rpc) framework.
+//! This crate provides procedural macros to simplify the implementation of RPC tasks for the [`razor-rpc`](https://docs.rs/razor-rpc) framework.
 //! These macros automatically generate boilerplate code for trait implementations, reducing manual effort and improving code clarity.
 //!
 //! # Provided Macros
@@ -53,13 +53,12 @@ mod server_task_enum;
 ///
 /// ### Example of Automatic `ClientTaskDone`
 ///
-/// ```rust
-/// use occams_rpc_stream::RpcError;
+/// use razor_stream::RpcError;
 /// use nix::errno::Errno;
-/// use occams_rpc_stream_macros::client_task;
+/// use razor_stream_macros::client_task;
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
-/// use occams_rpc_stream::client::task::*;
+/// use razor_stream::client::task::*;
 ///
 /// #[derive(Debug, Default, Deserialize, Serialize)]
 /// pub struct FileReadReq {
@@ -136,10 +135,10 @@ pub fn client_task(
 /// ### Example:
 ///
 /// ```rust
-/// use occams_rpc_stream::client::task::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
-/// use occams_rpc_stream::RpcError;
+/// use razor_stream::client::task::{ClientTask, ClientTaskCommon, ClientTaskAction, ClientTaskDone};
+/// use razor_stream::RpcError;
 /// use nix::errno::Errno;
-/// use occams_rpc_stream_macros::{client_task, client_task_enum};
+/// use razor_stream_macros::{client_task, client_task_enum};
 /// use serde_derive::{Deserialize, Serialize};
 /// use crossfire::{mpsc, MTx};
 ///
@@ -201,7 +200,7 @@ pub fn client_task(
 /// };
 ///
 /// let mut file_task: FileTask = open_task.into();
-/// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(1));
+/// assert_eq!(file_task.get_action(), razor_stream::proto::RpcAction::Num(1));
 /// file_task.set_ok();
 /// file_task.done();
 ///
@@ -218,7 +217,7 @@ pub fn client_task(
 /// };
 ///
 /// let mut file_task: FileTask = close_task.into();
-/// assert_eq!(file_task.get_action(), occams_rpc_stream::proto::RpcAction::Num(2));
+/// assert_eq!(file_task.get_action(), razor_stream::proto::RpcAction::Num(2));
 /// file_task.set_ok();
 /// file_task.done();
 ///
@@ -258,8 +257,8 @@ pub fn client_task_enum(
 /// ### Example:
 ///
 /// ```rust
-/// use occams_rpc_stream::server::task::ServerTaskVariant;
-/// use occams_rpc_stream_macros::server_task_enum;
+/// use razor_stream::server::task::ServerTaskVariant;
+/// use razor_stream_macros::server_task_enum;
 /// use serde_derive::{Deserialize, Serialize};
 /// use nix::errno::Errno;
 ///
