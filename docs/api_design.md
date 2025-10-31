@@ -31,11 +31,11 @@ will have a generic param `<C: ClientCaller<Factory: ClientFact<Task = APIClient
 
 At the client-side. there should be:
 
-- ClientStream: from razor-rpc-stream::client_impl::RpcClient.
+- ClientStream: from razor-stream::client_impl::RpcClient.
 - ClientCaller: from razor_stream
     - ClientPool: To maintain worker pool,
     - FailoverPool: loadbalance and fail over then server unreachable.
-- ClientFactsDefault: default facts that implements razor-rpc-stream::client::ClientFact
+- ClientFactsDefault: default facts that implements razor-stream::client::ClientFact
 - AsyncEndpoint: provides `async fn call`  (razor_rpc::client), a wrapper of ClientCaller. AsyncEndpoint can be clone if ClientCaller impl Clone.
 - BlockingEndpoint: provides `fn call` (razor_rpc::client)
 

@@ -15,12 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0]
 
-
 ### Changed
 
 - Project rename to razor-rpc
 
 - Split runtime traits from tokio and smol plugins to `orb`, `orb-tokio`, and `orb-smol` crates
+
+- Remove core crate (split into codec and stream)
 
 ### Fixed
 

@@ -3,7 +3,7 @@
 
 //! # razor-rpc-tcp
 //!
-//! This crate provides a TCP transport implementation for [`razor-rpc-stream`](https://docs.rs/razor-rpc-stream).
+//! This crate provides a TCP transport implementation for [`razor-stream`](https://docs.rs/razor-stream).
 //! It is used for both client and server communication over TCP.
 
 #[macro_use]

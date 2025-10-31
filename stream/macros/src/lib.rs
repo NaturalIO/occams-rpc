@@ -1,4 +1,4 @@
-//! # razor-rpc-stream-macros
+//! # razor-stream-macros
 //!
 //! This crate provides procedural macros to simplify the implementation of RPC tasks for the [`razor-rpc`](https://docs.rs/razor-rpc) framework.
 //! These macros automatically generate boilerplate code for trait implementations, reducing manual effort and improving code clarity.

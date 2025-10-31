@@ -1,6 +1,5 @@
 [package]
 name = "razor-rpc-test"
-version = "0.2.13"
 edition = "2024"
 
 [dependencies]

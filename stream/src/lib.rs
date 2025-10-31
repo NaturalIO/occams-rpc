@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, allow(unused_attributes))]
 
-//! # razor-rpc-stream
+//! # razor-stream
 //!
 //! This crate provides a low-level streaming interface for `razor-rpc`.
 //! It is used for stream processing and is part of the modular design of `razor-rpc`.
