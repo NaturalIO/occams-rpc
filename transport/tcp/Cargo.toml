@@ -22,7 +22,6 @@ orb = { version="0"}
 captains-log = ">=0.15"
 async-trait = "0.1"
 crossfire = "2.1"
-futures = "0.3"
 io-buffer = "1"
 libc = "0"
 
