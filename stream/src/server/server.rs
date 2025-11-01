@@ -1,7 +1,6 @@
 use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
-use futures::future::{AbortHandle, Abortable};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -11,7 +10,7 @@ pub struct RpcServer<F>
 where
     F: ServerFacts,
 {
-    listeners_abort: Vec<(AbortHandle, String)>,
+    listeners_abort: Vec<(<F as AsyncExec>::AsyncHandle<()>, String)>,
     logger: Arc<LogFilter>,
     facts: Arc<F>,
     conn_ref_count: Arc<()>,
@@ -55,41 +54,32 @@ where
                         }
                     }
                 };
-                let (abort_handle, abort_registration) = AbortHandle::new_pair();
                 let facts = self.facts.clone();
                 let conn_ref_count = self.conn_ref_count.clone();
                 let listener_info = format!("listener {:?}", addr);
                 let server_close_rx = self.server_close_rx.clone();
                 debug!("listening on {:?}", listener);
-                let abrt = Abortable::new(
-                    async move {
-                        loop {
-                            match listener.accept().await {
-                                Err(e) => {
-                                    warn!("{:?} accept error: {}", listener, e);
-                                    return;
-                                }
-                                Ok(stream) => {
-                                    let conn = T::new_conn(
-                                        stream,
-                                        facts.get_config(),
-                                        conn_ref_count.clone(),
-                                    );
-                                    Self::server_conn::<T, D>(
-                                        conn,
-                                        &facts,
-                                        dispatch.clone(),
-                                        server_close_rx.clone(),
-                                    )
-                                }
+                let handle = self.facts.spawn(async move {
+                    loop {
+                        match listener.accept().await {
+                            Err(e) => {
+                                warn!("{:?} accept error: {}", listener, e);
+                                return;
+                            }
+                            Ok(stream) => {
+                                let conn =
+                                    T::new_conn(stream, facts.get_config(), conn_ref_count.clone());
+                                Self::server_conn::<T, D>(
+                                    conn,
+                                    &facts,
+                                    dispatch.clone(),
+                                    server_close_rx.clone(),
+                                )
                             }
                         }
-                    },
-                    abort_registration,
-                );
-
-                self.facts.spawn_detach(abrt);
-                self.listeners_abort.push((abort_handle, listener_info));
+                    }
+                });
+                self.listeners_abort.push((handle, listener_info));
                 return Ok(local_addr);
             }
         }
@@ -219,7 +209,7 @@ where
     /// ServerConfig.server_close_wait
     pub async fn close(&mut self) {
         // close listeners
-        for h in &self.listeners_abort {
+        for h in self.listeners_abort.drain(0..) {
             h.0.abort();
             logger_info!(self.logger, "{} has closed", h.1);
         }
