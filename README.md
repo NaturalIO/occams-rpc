@@ -45,7 +45,7 @@ coroutine to write responses. Requests can be dispatched with a user-defined
 currently)
 - Support latest `impl Future` definition of rust since 1.75, also support legacy `async_trait`
 wrapper
-- Each method can have different custom error type (requires the type implements [RpcErrCodec](https://docs.rs/razor-stream/latest/razor_stream/trait.RpcErrCodec.html))
+- Each method can have different custom error type (requires the type implements [RpcErrCodec](https://docs.rs/razor-stream/latest/razor_stream/error/trait.RpcErrCodec.html))
 - based on razor-stream`: Full duplex in each connection, with sliding window threshold, allow maximizing throughput and lower cpu usage.
 
 (Warning: The API and feature is still evolving, might changed in the future)
@@ -62,7 +62,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 // 1. Choose the async runtime, and the codec
-type OurRt = razor_rpc_smol::SmolRT;
+type OurRt = orb_smol::SmolRT;
 type OurCodec = razor_rpc_codec::MsgpCodec;
 // 2. Choose transport
 type ServerProto = TcpServer<OurRt>;
