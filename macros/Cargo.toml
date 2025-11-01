@@ -22,15 +22,3 @@ proc-macro = true
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-
-[dev-dependencies]
-captains-log = "0"
-serde = { version = "1.0", features = ["derive"] }
-crossfire = "2.1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-async-trait = "0.1"
-nix = "0"
-orb-tokio = { version = "0" }
-razor-rpc-codec = { path = "../codec", version=">=0.3", features=["msgpack"] }
-razor-stream = { path = "../stream", version=">=0.3" }
-razor-rpc = { path = "../", version = ">=0.3"}

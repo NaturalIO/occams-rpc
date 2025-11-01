@@ -39,6 +39,7 @@ crossfire = "2.1"
 [dev-dependencies]
 num_enum = "0"
 serde_derive = "1"
+razor-rpc-codec = { path="../codec", version="0", features=["msgpack"] }
 
 [package.metadata.docs.rs]
 all-features = true

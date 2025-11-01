@@ -57,7 +57,7 @@
 //! use std::sync::Arc;
 //!
 //! // 1. Choose the async runtime, and the codec
-//! type OurRt = orb_smol::SmolRT;
+//! type OurRt = orb_tokio::TokioRT;
 //! type OurCodec = razor_rpc_codec::MsgpCodec;
 //! // 2. Choose transport
 //! type ServerProto = TcpServer<OurRt>;
@@ -109,7 +109,7 @@
 //!     // 5. Server setup with default ServerFacts
 //!     use razor_rpc::server::{RpcServer, ServerDefault};
 //!     let server_config = ServerConfig::default();
-//!     let mut server = RpcServer::new(ServerDefault::new(server_config, OurRt::new_global()));
+//!     let mut server = RpcServer::new(ServerDefault::new(server_config, OurRt::new_multi_thread(8)));
 //!     // 6. dispatch
 //!     use razor_rpc::server::dispatch::Inline;
 //!     let disp = Inline::<OurCodec, _>::new(CalculatorServer);
@@ -123,7 +123,7 @@
 //!     // 8. ClientFacts
 //!     let mut client_config = ClientConfig::default();
 //!     client_config.task_timeout = 5;
-//!     let rt = OurRt::new_global();
+//!     let rt = OurRt::new_multi_thread(8);
 //!     type OurFacts = APIClientDefault<OurRt, OurCodec>;
 //!     let client_facts = OurFacts::new(client_config, rt);
 //!     // 9. Create client connection pool

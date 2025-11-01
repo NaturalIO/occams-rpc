@@ -3,10 +3,10 @@ use razor_rpc::{Codec, error::RpcError};
 use razor_rpc_codec::MsgpCodec;
 use razor_rpc_macros::{method, service, service_mux_struct};
 use razor_stream::server::task::RespNoti;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 
-pub fn create_mock_request<T: Serialize>(
+pub fn create_mock_request<T: serde::Serialize>(
     seq: u64, service: String, method: String, req: &T, noti: RespNoti<APIServerResp>,
 ) -> APIServerReq<MsgpCodec> {
     let codec = Arc::new(MsgpCodec::default());

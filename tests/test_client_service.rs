@@ -11,7 +11,7 @@ use razor_stream::client::task::{
     ClientTaskAction, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
 };
 use razor_stream::proto::RpcAction;
-use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 

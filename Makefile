@@ -14,20 +14,20 @@ fmt: init
 	cargo fmt
 
 .PHONY: test-all
-test-all: test-codec test-stream-macros test-api-macros test
+test-all: test-codec test-stream test-api test
 	echo run all tests
 
 .PHONY: test-codec
 	cargo check -p razor-rpc-codec
 	cargo test -p razor-rpc-codec
 
-.PHONY: test-stream-macros
-test-stream-macros: init
-	cargo test -p razor-stream-macros -- --nocapture
+.PHONY: test-stream
+test-stream: init
+	cargo test -p razor-stream -- --nocapture
 
-.PHONY: test-api-macros
-test-api-macros: init
-	RUST_BACKTRACE=1 cargo test -p razor-rpc-macros -- --nocapture
+.PHONY: test-api
+test-api: init
+	RUST_BACKTRACE=1 cargo test -p razor-rpc -- --nocapture
 
 # usage:
 # make test-stream "test_normal --F tokio"

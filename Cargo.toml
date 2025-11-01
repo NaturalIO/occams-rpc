@@ -32,9 +32,10 @@ razor-rpc-macros = { path = "macros", version = ">=0.3" }
 [dev-dependencies]
 serde_derive = "1"
 nix = "0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 razor-rpc-tcp = {path="transport/tcp/", version = "0"}
 razor-rpc-codec = {path="codec/", version="0", features=["msgpack"]}
-orb-smol = { version="0", features = ["global"] }
+orb-tokio = { version="0" }
 
 [package.metadata.docs.rs]
 all-features = true
